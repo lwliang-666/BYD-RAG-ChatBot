@@ -165,6 +165,7 @@ async function handleSend(content) {
     const reader = response.body.getReader()
     const decoder = new TextDecoder()
     let fullContent = ''
+    let lastSources = null
 
     while (true) {
       const { done, value } = await reader.read()
@@ -172,23 +173,27 @@ async function handleSend(content) {
       const text = decoder.decode(value, { stream: true })
       const lines = text.split('\n')
 
+      let currentEvent = ''
       for (const line of lines) {
-        if (line.startsWith('event: token')) {
-          continue
-        }
-        if (line.startsWith('data: ')) {
+        if (line.startsWith('event: ')) {
+          currentEvent = line.slice(7).trim()
+        } else if (line.startsWith('data: ')) {
           try {
             const data = JSON.parse(line.slice(6))
-            if (data.content) {
+            if (currentEvent === 'token' && data.content) {
               fullContent += data.content
               chatStore.streamingContent = fullContent
+            } else if (currentEvent === 'sources' && data.chunks) {
+              lastSources = data.chunks
+            } else if (currentEvent === 'done') {
+              // stream complete
             }
           } catch {}
         }
       }
     }
 
-    chatStore.addMessage('assistant', fullContent)
+    chatStore.addMessage('assistant', fullContent, lastSources ? { chunks: lastSources } : null)
     chatStore.streamingContent = ''
   } catch (e) {
     chatStore.addMessage('assistant', '抱歉，发生了错误，请稍后再试。')
