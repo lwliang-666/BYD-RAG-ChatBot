@@ -17,7 +17,9 @@ api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    // 登录/注册接口的 401 直接抛出，不走 token 刷新逻辑
+    const isAuthEndpoint = originalRequest.url?.includes('/api/auth/login') || originalRequest.url?.includes('/api/auth/register')
+    if (error.response?.status === 401 && !originalRequest._retry && !isAuthEndpoint) {
       originalRequest._retry = true
       const refreshToken = localStorage.getItem('refresh_token')
       if (refreshToken) {
