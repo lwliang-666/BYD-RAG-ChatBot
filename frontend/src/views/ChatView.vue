@@ -76,6 +76,16 @@
               <div class="chat-message__content" v-html="renderStreaming"></div>
             </div>
           </div>
+          <div v-else-if="chatStore.isSending" class="chat-message chat-message--assistant">
+            <div class="chat-message__bot-avatar">AI</div>
+            <div class="chat-message__body">
+              <div class="chat-message__content chat-message__loading">
+                <span class="loading-dot"></span>
+                <span class="loading-dot"></span>
+                <span class="loading-dot"></span>
+              </div>
+            </div>
+          </div>
         </div>
         <ChatInput :disabled="chatStore.isSending" :is-streaming="chatStore.isSending" @send="handleSend" @stop="handleStop" />
       </template>
@@ -533,6 +543,35 @@ function handleLogout() {
   background: #f3f4f6;
   color: #1f2937;
   border-bottom-left-radius: 4px;
+}
+.chat-message__loading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 18px;
+}
+.loading-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #9ca3af;
+  animation: loading-bounce 1.4s ease-in-out infinite;
+}
+.loading-dot:nth-child(2) {
+  animation-delay: 0.16s;
+}
+.loading-dot:nth-child(3) {
+  animation-delay: 0.32s;
+}
+@keyframes loading-bounce {
+  0%, 80%, 100% {
+    transform: scale(0.6);
+    opacity: 0.4;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
 }
 .context-menu {
   position: fixed;
