@@ -6,7 +6,7 @@ from fastapi import Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.rag.graph import stream_rag_answer
-from app.services.chat_service import save_message, get_chat_history
+from app.services.chat_service import save_message, get_chat_history, update_conversation_title
 
 
 async def stream_chat(
@@ -18,6 +18,13 @@ async def stream_chat(
     await save_message(db, conversation_id, "user", user_message)
 
     chat_history = await get_chat_history(db, conversation_id, limit=10)
+
+    # 根据用户首条消息自动设置对话标题
+    if len(chat_history) <= 1:
+        title = user_message[:20].replace("\n", " ")
+        if len(user_message) > 20:
+            title += "..."
+        await update_conversation_title(db, conversation_id, title)
 
     full_answer = ""
     sources = None

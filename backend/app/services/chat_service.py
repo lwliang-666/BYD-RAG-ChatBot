@@ -87,6 +87,15 @@ async def delete_conversation(db: AsyncSession, conversation_id: uuid.UUID, user
     return result.rowcount > 0
 
 
+async def update_conversation_title(db: AsyncSession, conversation_id: uuid.UUID, title: str) -> None:
+    result = await db.execute(
+        update(Conversation)
+        .where(Conversation.id == conversation_id)
+        .values(title=title)
+    )
+    await db.flush()
+
+
 async def save_message(
     db: AsyncSession,
     conversation_id: uuid.UUID,

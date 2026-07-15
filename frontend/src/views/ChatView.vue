@@ -14,14 +14,27 @@
           @click="chatStore.selectConversation(conv.id)"
         >
           <span v-if="conv.is_pinned" class="sidebar__pin-icon">📌</span>
-          <span class="sidebar__item-title">{{ conv.title }}</span>
-          <button class="sidebar__item-more" @click.stop="openContextMenu($event, conv)">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-              <circle cx="5" cy="12" r="2"/>
-              <circle cx="12" cy="12" r="2"/>
-              <circle cx="19" cy="12" r="2"/>
-            </svg>
-          </button>
+          <template v-if="renamingConvId === conv.id">
+            <input
+              ref="renameInputRef"
+              v-model="renamingTitle"
+              class="sidebar__rename-input"
+              @keydown.enter="confirmRename"
+              @keydown.escape="cancelRename"
+              @blur="confirmRename"
+              @click.stop
+            />
+          </template>
+          <template v-else>
+            <span class="sidebar__item-title">{{ conv.title }}</span>
+            <button class="sidebar__item-more" @click.stop="openContextMenu($event, conv)">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                <circle cx="5" cy="12" r="2"/>
+                <circle cx="12" cy="12" r="2"/>
+                <circle cx="19" cy="12" r="2"/>
+              </svg>
+            </button>
+          </template>
         </div>
       </div>
       <div class="sidebar__footer">
@@ -154,6 +167,9 @@ const isEditingName = ref(false)
 const editingName = ref('')
 
 const contextMenu = ref({ visible: false, x: 0, y: 0, conv: null })
+const renamingConvId = ref(null)
+const renamingTitle = ref('')
+const renameInputRef = ref(null)
 
 const md = new MarkdownIt()
 
@@ -250,6 +266,8 @@ async function handleSend(content) {
   } finally {
     chatStore.isSending = false
     chatStore.abortController = null
+    // 刷新对话列表以同步后端自动设置的标题
+    chatStore.fetchConversations()
   }
 }
 
@@ -271,12 +289,28 @@ function openContextMenu(e, conv) {
 
 async function handleRename() {
   const conv = contextMenu.value.conv
-  if (!conv) return
-  const title = prompt('请输入新名称', conv.title)
-  if (title && title.trim()) {
-    await chatStore.renameConversation(conv.id, title.trim())
-  }
   contextMenu.value.visible = false
+  if (!conv) return
+  renamingConvId.value = conv.id
+  renamingTitle.value = conv.title
+  await nextTick()
+  const inputs = document.querySelectorAll('.sidebar__rename-input')
+  if (inputs.length) inputs[inputs.length - 1].focus()
+}
+
+async function confirmRename() {
+  const convId = renamingConvId.value
+  const title = renamingTitle.value.trim()
+  renamingConvId.value = null
+  if (!convId || !title) return
+  const conv = chatStore.conversations.find((c) => c.id === convId)
+  if (conv && conv.title !== title) {
+    await chatStore.renameConversation(convId, title)
+  }
+}
+
+function cancelRename() {
+  renamingConvId.value = null
 }
 
 async function handleTogglePin() {
@@ -412,6 +446,16 @@ function handleLogout() {
 .sidebar__item-more:hover {
   color: #374151;
   background: #e5e7eb;
+}
+.sidebar__rename-input {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  border: 1px solid #4f46e5;
+  border-radius: 4px;
+  padding: 2px 6px;
+  outline: none;
+  font-family: inherit;
 }
 .sidebar__footer {
   /* padding: 16px; */
