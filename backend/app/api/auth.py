@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -14,7 +15,12 @@ async def register(request: RegisterRequest, db: AsyncSession = Depends(get_db))
         user = await register_user(db, request)
         return create_tokens(user.id)
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
+        msg = str(e)
+        if "密码过长" in msg or "72 bytes" in msg:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="密码过长，最多支持72个字节")
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=msg)
+    except IntegrityError:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="用户名已存在")
 
 
 @router.post("/login", response_model=TokenResponse)
