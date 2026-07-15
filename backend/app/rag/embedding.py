@@ -1,46 +1,49 @@
-import json
-import os
-from pathlib import Path
-from typing import Optional
+import asyncio
+import logging
 
 import httpx
 
 from app.core.config import get_settings
 
+logger = logging.getLogger(__name__)
+
 settings = get_settings()
 
 _embedding_model = None
+_model_load_failed = False
 
 
-def get_embedding_model():
-    global _embedding_model
-    if _embedding_model is not None:
-        return _embedding_model
+def _load_model():
+    """同步加载模型，供 asyncio.to_thread 调用"""
+    global _embedding_model, _model_load_failed
+
+    if _embedding_model is not None or _model_load_failed:
+        return
 
     try:
-        from mlx_embeddings import EmbeddingModel
-        model_path = os.path.expanduser(settings.EMBEDDING_MODEL_PATH)
-        if Path(model_path).exists():
-            _embedding_model = EmbeddingModel(model_path)
-        else:
-            _embedding_model = EmbeddingModel(settings.EMBEDDING_MODEL_PATH)
-    except ImportError:
+        from sentence_transformers import SentenceTransformer
+        logger.info("正在加载 Embedding 模型: %s", settings.EMBEDDING_MODEL_PATH)
+        _embedding_model = SentenceTransformer(settings.EMBEDDING_MODEL_PATH, local_files_only=True)
+        logger.info("Embedding 模型加载完成")
+    except Exception as e:
+        _model_load_failed = True
         _embedding_model = None
+        logger.warning("Embedding 模型加载失败，将使用 API 方式: %s", e)
 
-    return _embedding_model
+
+async def init_embedding_model():
+    """应用启动时预加载模型"""
+    await asyncio.to_thread(_load_model)
 
 
 async def embed_texts(texts: list[str]) -> list[list[float]]:
-    model = get_embedding_model()
+    # 首次调用时懒加载模型（在线程中执行，不阻塞事件循环）
+    if _embedding_model is None and not _model_load_failed:
+        await asyncio.to_thread(_load_model)
 
-    if model is not None:
-        embeddings = []
-        batch_size = settings.EMBEDDING_BATCH_SIZE
-        for i in range(0, len(texts), batch_size):
-            batch = texts[i:i + batch_size]
-            result = model.encode(batch)
-            embeddings.extend(result.tolist() if hasattr(result, "tolist") else result)
-        return embeddings
+    if _embedding_model is not None:
+        result = await asyncio.to_thread(_embedding_model.encode, texts, batch_size=settings.EMBEDDING_BATCH_SIZE)
+        return result.tolist() if hasattr(result, "tolist") else result
 
     return await _embed_via_api(texts)
 

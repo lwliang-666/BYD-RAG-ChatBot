@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     LLM_API_KEY: str = os.getenv("XFXC_API_KEY")
 
     # Embedding
-    EMBEDDING_MODEL_PATH: str = "BAAI/bge-large-zh-v1.5-mlx-4bit"
+    EMBEDDING_MODEL_PATH: str = "BAAI/bge-large-zh-v1.5"
     EMBEDDING_DIMENSION: int = 1024
     EMBEDDING_BATCH_SIZE: int = 64
 

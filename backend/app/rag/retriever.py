@@ -28,7 +28,7 @@ async def store_chunks(
         await db.execute(
             text("""
                 INSERT INTO document_chunks (id, document_name, chunk_index, content, embedding, metadata)
-                VALUES (:id, :doc_name, :chunk_idx, :content, :embedding::vector, :metadata::jsonb)
+                VALUES (:id, :doc_name, :chunk_idx, :content, CAST(:embedding AS vector), CAST(:metadata AS jsonb))
             """),
             {
                 "id": str(uuid.uuid4()),
@@ -58,9 +58,9 @@ async def search_similar(
         text("""
             SELECT
                 id, document_name, chunk_index, content, metadata,
-                1 - (embedding <=> :query_embedding::vector) AS similarity
+                1 - (embedding <=> CAST(:query_embedding AS vector)) AS similarity
             FROM document_chunks
-            ORDER BY embedding <=> :query_embedding::vector
+            ORDER BY embedding <=> CAST(:query_embedding AS vector)
             LIMIT :top_k
         """),
         {
