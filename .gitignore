@@ -42,3 +42,6 @@ backend/uploads/
 
 # Project copies
 *copy*
+
+# MCP
+.playwright-mcp/
