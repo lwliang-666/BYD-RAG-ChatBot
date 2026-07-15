@@ -130,4 +130,3 @@ async def stream_rag_answer(query: str, db, chat_history: list[dict] | None = No
         yield f"event: token\ndata: {json.dumps({'content': token}, ensure_ascii=False)}\n\n"
 
     yield f"event: sources\ndata: {json.dumps({'chunks': sources}, ensure_ascii=False)}\n\n"
-    yield "event: done\ndata: {}\n\n"

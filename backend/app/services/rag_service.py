@@ -47,12 +47,17 @@ async def stream_chat(
             sources = data.get("chunks", [])
             yield chunk
         elif chunk.startswith("event: done"):
-            yield chunk
+            # 先保存消息，获取 message_id 后再发送 done 事件
+            pass
 
     # 保存已生成的回答（被停止时追加停止标记）
+    message_id = None
     if full_answer:
         answer = full_answer + "\n\n*[对话已停止]*" if stopped else full_answer
-        await save_message(
+        message = await save_message(
             db, conversation_id, "assistant", answer,
             {"chunks": sources} if sources else None,
         )
+        message_id = str(message.id)
+
+    yield f"event: done\ndata: {json.dumps({'message_id': message_id}, ensure_ascii=False)}\n\n"

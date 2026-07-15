@@ -16,3 +16,4 @@ pydantic-settings>=2.0
 python-dotenv>=1.0.0
 sse-starlette>=2.0.0
 tiktoken>=0.7.0
+sentence-transformers>=2.0.0

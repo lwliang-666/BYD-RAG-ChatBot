@@ -12,7 +12,7 @@
 | 后端 | Python + LangGraph + FastAPI |
 | 数据库 | Docker + PolarDB-PG (pgvector) |
 | LLM | 讯飞星火 coding plan (astron-code-latest) |
-| Embedding | bge-large-zh-v1.5 MLX 4-bit 量化版 (本地 Apple Silicon) |
+| Embedding | bge-large-zh-v1.5 (SentenceTransformer 本地推理) |
 | 认证 | JWT Token |
 
 ### 核心功能
@@ -33,6 +33,7 @@ BYD-RAG-ChatBot/
 |   +-- public/
 |   +-- src/
 |   |   +-- api/
+|   |   |   +-- request.js
 |   |   |   +-- auth.js
 |   |   |   +-- chat.js
 |   |   |   +-- user.js
@@ -42,8 +43,6 @@ BYD-RAG-ChatBot/
 |   |   |   +-- ChatMessage.vue
 |   |   |   +-- ChatInput.vue
 |   |   |   +-- AvatarUpload.vue
-|   |   +-- layouts/
-|   |   |   +-- MainLayout.vue
 |   |   +-- router/
 |   |   |   +-- index.js
 |   |   +-- stores/
@@ -109,7 +108,7 @@ BYD-RAG-ChatBot/
 | 字段 | 类型 | 约束 | 说明 |
 |------|------|------|------|
 | id | UUID | PK | 主键 |
-| username | VARCHAR(50) | UNIQUE, NOT NULL | 用户名(登录名) |
+| username | VARCHAR(50) | NOT NULL | 用户名(登录名, 部分唯一索引) |
 | display_name | VARCHAR(50) | | 显示名称(可修改) |
 | password_hash | VARCHAR(255) | NOT NULL | 密码哈希 |
 | avatar_url | VARCHAR(500) | | 头像路径 |
@@ -154,7 +153,7 @@ BYD-RAG-ChatBot/
 
 ### 3.5 索引设计
 
-- users: username 唯一索引
+- users: username 部分唯一索引(WHERE is_deleted = FALSE, 允许软删除用户名重新注册)
 - conversations: user_id + is_deleted 复合索引, is_pinned 索引
 - messages: conversation_id 索引
 - document_chunks: embedding 向量索引(IVFFlat 或 HNSW)
@@ -216,11 +215,11 @@ data: {"message_id": "uuid"}
 flowchart LR
     A[PDF 文档] --> B[PyMuPDF 解析]
     B --> C[语义分块]
-    C --> D[MLX Embedding]
+    C --> D[SentenceTransformer Embedding]
     D --> E[PolarDB-PG 存储]
 ```
 
-### 5.2 查询流程 (LangGraph)
+### 5.2 查询流程
 
 ```mermaid
 flowchart TD
@@ -233,19 +232,22 @@ flowchart TD
     W --> X[前端展示]
 ```
 
-### 5.3 LangGraph 工作流
+### 5.3 RAG 查询流程
+
+采用过程式实现，简洁高效:
 
 ```mermaid
 flowchart TD
-    start([开始]) --> retrieve[检索节点: pgvector 查询]
-    retrieve --> grade[评估节点: 判断检索相关性]
-    grade -->|相关| generate[生成节点: LLM 回答]
-    grade -->|不相关| rewrite[改写节点: 优化查询]
-    rewrite --> retrieve
-    generate --> check[检查节点: 幻觉检测]
-    check -->|通过| output([输出结果])
-    check -->|不通过| generate
+    Q[用户提问] --> R[Query Embedding]
+    R --> S[pgvector 相似度检索]
+    S --> T[Top-K 文档块]
+    T --> U[Prompt 组装 + 历史消息]
+    U --> V[讯飞星火 LLM 流式生成]
+    V --> W[SSE 流式响应]
+    W --> X[前端展示]
 ```
+
+> 注: graph.py 中保留了 LangGraph 的 RAGState/retrieve_node/generate_node 定义作为扩展预留，当前主流程 stream_rag_answer 采用过程式实现。
 
 ### 5.4 语义分块策略
 
@@ -258,9 +260,9 @@ flowchart TD
 
 ### 5.5 Embedding 配置
 
-- 模型: bge-large-zh-v1.5 (MLX 4-bit 量化)
+- 模型: bge-large-zh-v1.5 (SentenceTransformer 本地推理)
 - 维度: 1024
-- 运行方式: 本地 Apple Silicon 推理
+- 运行方式: 本地 SentenceTransformer 推理, 加载失败时回退到 API 方式
 - 批量处理: 每批 64 条文本块
 
 ---
@@ -306,10 +308,10 @@ flowchart LR
 
 ### 6.4 关键交互
 
-- 对话列表: 支持右键菜单(重命名/置顶/删除)
+- 对话列表: 支持三点按钮菜单(重命名/置顶/删除)
 - 消息展示: 用户消息靠右, AI 消息靠左, 支持 Markdown 渲染
 - AI 回答: SSE 流式逐字显示, 底部展示引用来源
-- 头像上传: 点击头像弹出文件选择, 支持 jpg/png, 大小限制 2MB
+- 头像上传: 点击头像弹出文件选择, 支持 jpg/png/gif/webp, 大小限制 2MB
 - 用户名修改: 点击编辑图标, 失焦时校验唯一性
 
 ---
@@ -322,7 +324,7 @@ flowchart LR
 - 创建 .gitignore 文件
 - 初始化前端项目: pnpm create vite frontend --template vue
 - 初始化后端项目: 创建 backend/ 目录结构
-- 创建 backend/requirements.txt (核心依赖: fastapi, uvicorn, sqlalchemy, asyncpg, pyjwt, python-multipart, langgraph, pymupdf, mlx-embedding)
+- 创建 backend/requirements.txt (核心依赖: fastapi, uvicorn, sqlalchemy, asyncpg, pyjwt, passlib, python-jose, python-multipart, langgraph, langchain-core, langchain-openai, pymupdf, httpx, pydantic, pydantic-settings, python-dotenv, sse-starlette, tiktoken, sentence-transformers)
 
 **步骤 1.2: Docker + PolarDB-PG 搭建**
 - 编写 docker/docker-compose.yml
@@ -366,12 +368,13 @@ flowchart LR
   - 保留元数据(页码/章节名)
   - 块大小: 目标 500 tokens, 最大 800, 重叠 50
 
-**步骤 3.2: MLX Embedding 集成**
+**步骤 3.2: SentenceTransformer Embedding 集成**
 - 实现 backend/app/rag/embedding.py
-  - 加载 bge-large-zh-v1.5 MLX 4-bit 量化模型
+  - 加载 bge-large-zh-v1.5 SentenceTransformer 模型
   - 实现批量文本向量化接口
   - 批大小: 64 条/批
   - 输出维度: 1024
+  - 模型加载失败时回退到 API 方式
 
 **步骤 3.3: 向量存储与检索**
 - 实现 backend/app/rag/retriever.py
@@ -387,12 +390,12 @@ flowchart LR
   - 支持断点续传(已处理的块跳过)
   - 进度条显示
 
-**步骤 3.5: LangGraph 工作流**
+**步骤 3.5: RAG 查询流程**
 - 实现 backend/app/rag/graph.py
-  - 检索节点: 调用 retriever 获取相关文档块
-  - 评估节点: 判断检索结果相关性(可选, 用 LLM 判断)
-  - 生成节点: 组装 Prompt + 调用讯飞星火 LLM
-  - 流式输出: 逐 token 返回前端
+  - 检索: 调用 retriever 获取相关文档块
+  - 生成: 组装 Prompt + 历史消息 + 调用讯飞星火 LLM
+  - 流式输出: 逐 token 返回前端(SSE 格式)
+  - 保留 LangGraph 扩展预留(RAGState/retrieve_node/generate_node)
 
 ### 阶段四: 后端对话与用户模块 (预计 1-2 天)
 
@@ -436,7 +439,7 @@ flowchart LR
 - auth store: 保存 token, 自动刷新, 路由守卫
 
 **步骤 5.3: 聊天主页面布局**
-- MainLayout.vue: 左右分栏布局
+- ChatView.vue: 左右分栏布局(侧边栏 280px + 主区域 flex)
 - 左侧边栏:
   - 顶部: "开启新对话" 按钮
   - 中部: 对话记录列表(支持滚动加载)
@@ -450,7 +453,7 @@ flowchart LR
 - 对话列表组件:
   - 显示对话标题+时间
   - 置顶对话置顶显示+置顶图标
-  - 右键/长按菜单: 重命名/置顶/取消置顶/删除
+  - 三点按钮菜单: 重命名/置顶/取消置顶/删除
   - 点击切换对话
 - 新建对话: 点击按钮创建空对话, 自动切换
 - 重命名: 弹出输入框修改标题
@@ -472,7 +475,7 @@ flowchart LR
 **步骤 5.6: 用户信息管理**
 - 头像区域:
   - 默认显示线性 SVG 占位图
-  - 点击触发文件选择, 上传新头像
+  - 点击触发文件选择, 上传新头像(支持 jpg/png/gif/webp)
   - 上传后即时预览
 - 用户名:
   - 默认显示登录名
@@ -534,11 +537,15 @@ python-jose[cryptography]>=3.3.0
 python-multipart>=0.0.9
 langgraph>=0.1.0
 langchain-core>=0.2.0
+langchain-openai>=0.1.0
 pymupdf>=1.24.0
-mlx-embedding @ git+https://github.com/ml-explore/mlx-embedding.git
 httpx>=0.27.0
 pydantic>=2.0
 pydantic-settings>=2.0
+python-dotenv>=1.0.0
+sse-starlette>=2.0.0
+tiktoken>=0.7.0
+sentence-transformers>=2.0.0
 ```
 
 ### 前端 (package.json)
@@ -572,7 +579,7 @@ LLM_BASE_URL=https://maas-coding-api.cn-huabei-1.xf-yun.com/v2
 LLM_API_KEY=your-api-key
 
 # Embedding
-EMBEDDING_MODEL_PATH=BAAI/bge-large-zh-v1.5-mlx-4bit
+EMBEDDING_MODEL_PATH=BAAI/bge-large-zh-v1.5
 EMBEDDING_DIMENSION=1024
 EMBEDDING_BATCH_SIZE=64
 

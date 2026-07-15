@@ -4,7 +4,7 @@ CREATE EXTENSION IF NOT EXISTS vector;
 -- 创建用户表
 CREATE TABLE IF NOT EXISTS users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    username VARCHAR(50) UNIQUE NOT NULL,
+    username VARCHAR(50) NOT NULL,
     display_name VARCHAR(50),
     password_hash VARCHAR(255) NOT NULL,
     avatar_url VARCHAR(500),
@@ -46,7 +46,7 @@ CREATE TABLE IF NOT EXISTS document_chunks (
 );
 
 -- 创建索引
-CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
+CREATE UNIQUE INDEX IF NOT EXISTS ix_users_username_active ON users(username) WHERE is_deleted = FALSE;
 CREATE INDEX IF NOT EXISTS idx_conversations_user_deleted ON conversations(user_id, is_deleted);
 CREATE INDEX IF NOT EXISTS idx_conversations_pinned ON conversations(is_pinned);
 CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id);
