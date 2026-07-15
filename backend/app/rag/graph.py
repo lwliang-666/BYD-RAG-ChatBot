@@ -11,7 +11,7 @@ from app.rag.embedding import embed_query
 
 settings = get_settings()
 
-SYSTEM_PROMPT = """你是比亚迪技术文档的专业问答助手，专注于比亚迪 QZJ05 相关技术问题解答。
+SYSTEM_PROMPT = """你是比亚迪技术文档的专业问答助手，专注于比亚迪 驱逐舰05 相关技术问题解答。
 
 请严格遵守以下规则：
 1. 仅根据下方检索到的文档内容回答用户问题，不要编造或推测内容

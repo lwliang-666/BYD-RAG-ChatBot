@@ -1,3 +1,4 @@
+import os
 from pydantic_settings import BaseSettings
 from functools import lru_cache
 
@@ -15,7 +16,7 @@ class Settings(BaseSettings):
     # LLM
     LLM_MODEL_ID: str = "astron-code-latest"
     LLM_BASE_URL: str = "https://maas-coding-api.cn-huabei-1.xf-yun.com/v2"
-    LLM_API_KEY: str = "your-api-key"
+    LLM_API_KEY: str = os.getenv("XFXC_API_KEY")
 
     # Embedding
     EMBEDDING_MODEL_PATH: str = "BAAI/bge-large-zh-v1.5-mlx-4bit"
