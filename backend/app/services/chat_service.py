@@ -16,6 +16,7 @@ async def create_conversation(db: AsyncSession, user_id: uuid.UUID, data: Conver
     )
     db.add(conversation)
     await db.flush()
+    await db.refresh(conversation)
     return conversation
 
 
@@ -71,6 +72,7 @@ async def update_conversation(
         conversation.is_pinned = data.is_pinned
 
     await db.flush()
+    await db.refresh(conversation)
     return conversation
 
 
@@ -111,6 +113,7 @@ async def save_message(
     )
     db.add(message)
     await db.flush()
+    await db.refresh(message)
     return message
 
 
