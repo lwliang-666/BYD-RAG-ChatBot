@@ -170,6 +170,7 @@ const contextMenu = ref({ visible: false, x: 0, y: 0, conv: null })
 const renamingConvId = ref(null)
 const renamingTitle = ref('')
 const renameInputRef = ref(null)
+let renameConfirming = false
 
 const md = new MarkdownIt()
 
@@ -299,14 +300,18 @@ async function handleRename() {
 }
 
 async function confirmRename() {
+  if (renameConfirming) return
+  renameConfirming = true
   const convId = renamingConvId.value
   const title = renamingTitle.value.trim()
   renamingConvId.value = null
-  if (!convId || !title) return
-  const conv = chatStore.conversations.find((c) => c.id === convId)
-  if (conv && conv.title !== title) {
-    await chatStore.renameConversation(convId, title)
+  if (convId && title) {
+    const conv = chatStore.conversations.find((c) => c.id === convId)
+    if (conv && conv.title !== title) {
+      await chatStore.renameConversation(convId, title)
+    }
   }
+  renameConfirming = false
 }
 
 function cancelRename() {
