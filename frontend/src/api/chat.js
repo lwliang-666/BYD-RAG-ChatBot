@@ -20,7 +20,7 @@ export function deleteConversation(id) {
   return api.delete(`/api/chat/conversations/${id}`)
 }
 
-export function sendMessage(conversationId, content) {
+export function sendMessage(conversationId, content, signal) {
   const token = localStorage.getItem('access_token')
   return fetch(`/api/chat/conversations/${conversationId}/messages`, {
     method: 'POST',
@@ -29,5 +29,6 @@ export function sendMessage(conversationId, content) {
       Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify({ content }),
+    signal,
   })
 }

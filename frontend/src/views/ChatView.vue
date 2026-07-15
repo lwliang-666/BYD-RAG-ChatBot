@@ -3,6 +3,7 @@
     <!-- 左侧边栏 -->
     <aside class="sidebar">
       <div class="sidebar__header">
+        <h2 class="sidebar__title">比亚迪驱逐舰05 智能问答助手</h2>
         <button class="sidebar__new-btn" @click="handleNewConversation">+ 开启新对话</button>
       </div>
       <div class="sidebar__list">
@@ -11,10 +12,16 @@
           :key="conv.id"
           :class="['sidebar__item', { 'sidebar__item--active': chatStore.currentConversation === conv.id }]"
           @click="chatStore.selectConversation(conv.id)"
-          @contextmenu.prevent="openContextMenu($event, conv)"
         >
           <span v-if="conv.is_pinned" class="sidebar__pin-icon">📌</span>
           <span class="sidebar__item-title">{{ conv.title }}</span>
+          <button class="sidebar__item-more" @click.stop="openContextMenu($event, conv)">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+              <circle cx="5" cy="12" r="2"/>
+              <circle cx="12" cy="12" r="2"/>
+              <circle cx="19" cy="12" r="2"/>
+            </svg>
+          </button>
         </div>
       </div>
       <div class="sidebar__footer">
@@ -70,7 +77,7 @@
             </div>
           </div>
         </div>
-        <ChatInput :disabled="chatStore.isSending" @send="handleSend" />
+        <ChatInput :disabled="chatStore.isSending" :is-streaming="chatStore.isSending" @send="handleSend" @stop="handleStop" />
       </template>
       <template v-else>
         <div class="chat-main__empty">
@@ -80,17 +87,36 @@
       </template>
     </main>
 
-    <!-- 右键菜单 -->
+    <!-- 操作菜单 -->
     <div
       v-if="contextMenu.visible"
       class="context-menu"
       :style="{ top: contextMenu.y + 'px', left: contextMenu.x + 'px' }"
     >
-      <button @click="handleRename">重命名</button>
+      <button @click="handleRename">
+        <svg class="context-menu__icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+        </svg>
+        重命名
+      </button>
       <button @click="handleTogglePin">
+        <svg class="context-menu__icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 17v5"/>
+          <path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V5a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2z"/>
+        </svg>
         {{ contextMenu.conv?.is_pinned ? '取消置顶' : '置顶' }}
       </button>
-      <button class="context-menu__danger" @click="handleDelete">删除</button>
+      <button class="context-menu__danger" @click="handleDelete">
+        <svg class="context-menu__icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="3 6 5 6 21 6"/>
+          <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+          <path d="M10 11v6"/>
+          <path d="M14 11v6"/>
+          <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+        </svg>
+        删除
+      </button>
     </div>
   </div>
 </template>
@@ -158,10 +184,15 @@ async function handleSend(content) {
   if (!chatStore.currentConversation) return
   chatStore.isSending = true
   chatStore.streamingContent = ''
+
+  // 创建 AbortController
+  const controller = new AbortController()
+  chatStore.abortController = controller
+
   chatStore.addMessage('user', content)
 
   try {
-    const response = await sendMessage(chatStore.currentConversation, content)
+    const response = await sendMessage(chatStore.currentConversation, content, controller.signal)
     const reader = response.body.getReader()
     const decoder = new TextDecoder()
     let fullContent = ''
@@ -196,14 +227,36 @@ async function handleSend(content) {
     chatStore.addMessage('assistant', fullContent, lastSources ? { chunks: lastSources } : null)
     chatStore.streamingContent = ''
   } catch (e) {
-    chatStore.addMessage('assistant', '抱歉，发生了错误，请稍后再试。')
+    if (e.name === 'AbortError') {
+      // 用户主动停止，保存已接收的部分内容
+      if (chatStore.streamingContent) {
+        chatStore.addMessage('assistant', chatStore.streamingContent + '\n\n*[对话已停止]*')
+      }
+      chatStore.streamingContent = ''
+    } else {
+      chatStore.addMessage('assistant', '抱歉，发生了错误，请稍后再试。')
+      chatStore.streamingContent = ''
+    }
   } finally {
     chatStore.isSending = false
+    chatStore.abortController = null
+  }
+}
+
+function handleStop() {
+  if (chatStore.abortController) {
+    chatStore.abortController.abort()
   }
 }
 
 function openContextMenu(e, conv) {
-  contextMenu.value = { visible: true, x: e.clientX, y: e.clientY, conv }
+  const rect = e.currentTarget.getBoundingClientRect()
+  contextMenu.value = {
+    visible: true,
+    x: rect.right - 140,
+    y: rect.bottom + 4,
+    conv,
+  }
 }
 
 async function handleRename() {
@@ -276,6 +329,12 @@ function handleLogout() {
   padding: 16px;
   border-bottom: 1px solid #e5e7eb;
 }
+.sidebar__title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1f2937;
+  margin: 0 0 12px 0;
+}
 .sidebar__new-btn {
   width: 100%;
   padding: 10px;
@@ -322,12 +381,36 @@ function handleLogout() {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+.sidebar__item-more {
+  background: none;
+  border: none;
+  color: #9ca3af;
+  cursor: pointer;
+  padding: 2px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+.sidebar__item:hover .sidebar__item-more {
+  display: flex;
+}
+.sidebar__item-more:hover {
+  color: #374151;
+  background: #e5e7eb;
 }
 .sidebar__footer {
-  padding: 16px;
+  /* padding: 16px; */
+  height: 75px;
+  padding: 0 16px;
   border-top: 1px solid #e5e7eb;
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 10px;
 }
 .sidebar__user-info {
@@ -458,10 +541,12 @@ function handleLogout() {
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12);
   padding: 4px;
   z-index: 1000;
-  min-width: 120px;
+  min-width: 140px;
 }
 .context-menu button {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   width: 100%;
   padding: 8px 12px;
   background: none;
@@ -474,6 +559,9 @@ function handleLogout() {
 }
 .context-menu button:hover {
   background: #f3f4f6;
+}
+.context-menu__icon {
+  flex-shrink: 0;
 }
 .context-menu__danger {
   color: #ef4444 !important;

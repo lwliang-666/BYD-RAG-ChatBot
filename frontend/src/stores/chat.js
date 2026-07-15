@@ -12,6 +12,7 @@ export const useChatStore = defineStore('chat', () => {
   const isLoading = ref(false)
   const isSending = ref(false)
   const streamingContent = ref('')
+  const abortController = ref(null)
 
   async function fetchConversations() {
     const res = await getConversations()
@@ -67,7 +68,7 @@ export const useChatStore = defineStore('chat', () => {
 
   return {
     conversations, currentConversation, messages,
-    isLoading, isSending, streamingContent,
+    isLoading, isSending, streamingContent, abortController,
     fetchConversations, newConversation, selectConversation,
     renameConversation, togglePin, removeConversation, addMessage,
   }

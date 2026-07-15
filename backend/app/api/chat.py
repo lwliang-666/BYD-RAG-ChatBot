@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, Request, status, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -80,6 +80,7 @@ async def delete_conversation_api(
 
 @router.post("/conversations/{conversation_id}/messages")
 async def send_message(
+    request: Request,
     conversation_id: uuid.UUID,
     data: MessageCreate,
     current_user: User = Depends(get_current_user),
@@ -90,6 +91,6 @@ async def send_message(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="对话不存在")
 
     return StreamingResponse(
-        stream_chat(db, conversation_id, data.content),
+        stream_chat(db, conversation_id, data.content, request=request),
         media_type="text/event-stream",
     )
