@@ -1,5 +1,10 @@
 <template>
   <div class="auth-page">
+    <div class="brand">
+      <h1 class="brand__title">比亚迪驱逐舰05</h1>
+      <div class="brand__divider"></div>
+      <p class="brand__subtitle">智能问答助手</p>
+    </div>
     <div class="auth-card">
       <h2 class="auth-card__title">登录</h2>
       <form class="auth-card__form" @submit.prevent="handleLogin">
@@ -68,19 +73,100 @@ async function handleLogin() {
 </script>
 
 <style scoped>
+/* 引入 Google Fonts 中文艺术字体：ZCOOL XiaoWei 优雅衬线 */
+@import url('https://fonts.googleapis.com/css2?family=ZCOOL+XiaoWei&family=Noto+Serif+SC:wght@700;900&display=swap');
+
 .auth-page {
   min-height: 100vh;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  position: relative;
+  overflow: hidden;
+}
+/* 背景装饰光斑，增强层次感 */
+.auth-page::before,
+.auth-page::after {
+  content: '';
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.35;
+  pointer-events: none;
+}
+.auth-page::before {
+  width: 480px;
+  height: 480px;
+  top: -120px;
+  left: -120px;
+  background: radial-gradient(circle, #a78bfa 0%, transparent 70%);
+}
+.auth-page::after {
+  width: 520px;
+  height: 520px;
+  bottom: -160px;
+  right: -160px;
+  background: radial-gradient(circle, #60a5fa 0%, transparent 70%);
+}
+.brand {
+  position: relative;
+  z-index: 1;
+  text-align: center;
+  margin-bottom: 40px;
+  user-select: none;
+}
+.brand__title {
+  font-family: 'ZCOOL XiaoWei', 'Noto Serif SC', 'STKaiti', 'KaiTi', '楷体', serif;
+  font-size: 52px;
+  font-weight: 400;
+  letter-spacing: 8px;
+  margin: 0;
+  background: linear-gradient(135deg, #ffffff 0%, #e0e7ff 40%, #c4b5fd 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-shadow: 0 4px 20px rgba(255, 255, 255, 0.15);
+  filter: drop-shadow(0 6px 24px rgba(124, 58, 237, 0.45));
+}
+.brand__divider {
+  width: 160px;
+  height: 2px;
+  margin: 18px auto;
+  background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.7) 50%, transparent 100%);
+  position: relative;
+}
+.brand__divider::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ffffff;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 12px rgba(255, 255, 255, 0.9);
+}
+.brand__subtitle {
+  font-family: 'Noto Serif SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 14px;
+  padding-left: 14px; /* 视觉居中补偿字间距 */
+  margin: 0;
+  color: rgba(255, 255, 255, 0.92);
+  text-shadow: 0 2px 12px rgba(76, 29, 149, 0.5);
 }
 .auth-card {
+  position: relative;
+  z-index: 1;
   background: #fff;
   border-radius: 16px;
   padding: 40px;
   width: 400px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
 }
 .auth-card__title {
   text-align: center;

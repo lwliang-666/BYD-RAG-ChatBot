@@ -433,7 +433,7 @@ flowchart LR
 - 配置 Pinia stores
 
 **步骤 5.2: 登录/注册页面**
-- LoginView.vue: 用户名+密码表单, 登录按钮, 跳转注册链接
+- LoginView.vue: 品牌标题(比亚迪驱逐舰05 智能问答助手, 中文艺术字体+渐变+光斑背景) + 用户名+密码表单, 登录按钮, 跳转注册链接
 - RegisterView.vue: 用户名+密码+确认密码, 注册按钮, 跳转登录链接
 - 封装 api/auth.js: login/register/refresh
 - auth store: 保存 token, 自动刷新, 路由守卫
