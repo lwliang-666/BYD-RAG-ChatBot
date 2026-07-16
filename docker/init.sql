@@ -1,4 +1,5 @@
--- 启用 pgvector 扩展
+-- 启用扩展
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE EXTENSION IF NOT EXISTS vector;
 
 -- 创建用户表

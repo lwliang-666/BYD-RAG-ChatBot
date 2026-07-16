@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.database import get_db
+from app.core.database import get_db, AsyncSessionLocal
 from app.core.deps import get_current_user
 from app.models.user import User
 from app.schemas.chat import (
@@ -84,13 +84,26 @@ async def send_message(
     conversation_id: uuid.UUID,
     data: MessageCreate,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
 ):
-    conversation = await get_conversation_detail(db, conversation_id, current_user.id)
-    if not conversation:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="对话不存在")
+    # 使用独立的 session，避免 get_db 在 StreamingResponse 消费前关闭
+    # 先用 get_db 验证对话是否存在
+    async with AsyncSessionLocal() as check_db:
+        conversation = await get_conversation_detail(check_db, conversation_id, current_user.id)
+        if not conversation:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="对话不存在")
+
+    # 流式响应使用独立 session，在 stream_chat 中管理生命周期
+    async def stream_with_db():
+        async with AsyncSessionLocal() as db:
+            try:
+                async for chunk in stream_chat(db, conversation_id, data.content, request=request):
+                    yield chunk
+                await db.commit()
+            except Exception:
+                await db.rollback()
+                raise
 
     return StreamingResponse(
-        stream_chat(db, conversation_id, data.content, request=request),
+        stream_with_db(),
         media_type="text/event-stream",
     )
