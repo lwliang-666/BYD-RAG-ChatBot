@@ -64,6 +64,22 @@ function autoResize() {
   el.style.height = 'auto'
   el.style.height = Math.min(el.scrollHeight, 150) + 'px'
 }
+
+// 供父组件调用：写入内容并聚焦输入框
+function setText(value) {
+  text.value = value ?? ''
+  nextTick(() => {
+    autoResize()
+    if (textareaRef.value) {
+      textareaRef.value.focus()
+      // 光标定位到末尾，便于继续编辑
+      const len = textareaRef.value.value.length
+      textareaRef.value.setSelectionRange(len, len)
+    }
+  })
+}
+
+defineExpose({ setText })
 </script>
 
 <style scoped>

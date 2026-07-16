@@ -82,6 +82,7 @@
             :key="msg.id"
             :message="msg"
             :avatar-url="userStore.avatarUrl"
+            @fill="handleFillInput"
           />
           <div v-if="chatStore.streamingContent" class="chat-message chat-message--assistant">
             <div class="chat-message__bot-avatar">AI2</div>
@@ -100,7 +101,7 @@
             </div>
           </div>
         </div>
-        <ChatInput :disabled="chatStore.isSending" :is-streaming="chatStore.isSending" @send="handleSend" @stop="handleStop" />
+        <ChatInput ref="chatInputRef" :disabled="chatStore.isSending" :is-streaming="chatStore.isSending" @send="handleSend" @stop="handleStop" />
       </template>
       <template v-else>
         <div class="chat-main__empty">
@@ -162,6 +163,7 @@ const chatStore = useChatStore()
 const userStore = useUserStore()
 
 const messagesRef = ref(null)
+const chatInputRef = ref(null)
 const nameInputRef = ref(null)
 const isEditingName = ref(false)
 const editingName = ref('')
@@ -276,6 +278,11 @@ function handleStop() {
   if (chatStore.abortController) {
     chatStore.abortController.abort()
   }
+}
+
+// 将用户历史消息填入输入框，便于重新提问或编辑
+function handleFillInput(content) {
+  chatInputRef.value?.setText(content)
 }
 
 function openContextMenu(e, conv) {

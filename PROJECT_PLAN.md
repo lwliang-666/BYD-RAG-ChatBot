@@ -461,12 +461,13 @@ flowchart LR
 
 **步骤 5.5: 消息展示与发送**
 - ChatMessage.vue:
-  - 用户消息: 靠右显示, 用户头像
+  - 用户消息: 靠右显示, 用户头像, 悬停显示操作按钮(一键复制/一键填入输入框)
   - AI 消息: 靠左显示, AI 图标, Markdown 渲染, 代码高亮
   - AI 消息底部: 引用来源折叠区(点击展开查看原文档片段)
 - ChatInput.vue:
   - 多行输入框(Enter 发送, Shift+Enter 换行)
   - 发送按钮(发送中禁用)
+  - 暴露 setText 方法供外部填入内容
 - SSE 流式接收:
   - 使用 EventSource 或 fetch + ReadableStream
   - 逐字追加 AI 回答内容
