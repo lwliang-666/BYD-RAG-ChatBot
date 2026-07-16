@@ -312,7 +312,7 @@ flowchart LR
 - 消息展示: 用户消息靠右, AI 消息靠左, 支持 Markdown 渲染
 - AI 回答: SSE 流式逐字显示, 底部展示引用来源
 - 头像上传: 点击头像弹出文件选择, 支持 jpg/png/gif/webp, 大小限制 2MB
-- 用户名修改: 点击编辑图标, 失焦时校验唯一性
+- 用户名修改: 双击用户名或单击编辑图标进入编辑模式, 失焦时校验唯一性
 
 ---
 
@@ -479,7 +479,7 @@ flowchart LR
   - 上传后即时预览
 - 用户名:
   - 默认显示登录名
-  - 点击编辑图标进入编辑模式
+  - 双击用户名或单击编辑图标进入编辑模式
   - 失焦/回车时调用后端校验唯一性
   - 重复则提示错误, 保留原值
 
@@ -573,10 +573,9 @@ JWT_ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=30
 REFRESH_TOKEN_EXPIRE_DAYS=7
 
-# LLM
+# LLM (LLM_API_KEY 从系统环境变量 XFXC_API_KEY 读取)
 LLM_MODEL_ID=astron-code-latest
 LLM_BASE_URL=https://maas-coding-api.cn-huabei-1.xf-yun.com/v2
-LLM_API_KEY=your-api-key
 
 # Embedding
 EMBEDDING_MODEL_PATH=BAAI/bge-large-zh-v1.5
