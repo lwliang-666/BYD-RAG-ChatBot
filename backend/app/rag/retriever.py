@@ -1,3 +1,11 @@
+"""
+向量检索与存储模块
+
+提供文档分块的向量存储和相似度检索功能。
+使用 pgvector 扩展进行向量存储和余弦距离检索，
+支持按 top_k 返回最相似的文档片段。
+"""
+
 import json
 import uuid
 from typing import Optional
@@ -17,8 +25,14 @@ async def store_chunks(
     chunks: list,
     embeddings: list[list[float]],
 ) -> int:
+    """将文档分块及其向量批量写入数据库
+
+    将每个分块的内容、向量、元数据插入 document_chunks 表，
+    返回成功写入的分块数量。
+    """
     count = 0
     for chunk, embedding in zip(chunks, embeddings):
+        # 将向量列表转换为 pgvector 可识别的字符串格式
         embedding_str = "[" + ",".join(str(v) for v in embedding) + "]"
         metadata = json.dumps({
             "page_number": chunk.page_number,
@@ -48,12 +62,19 @@ async def search_similar(
     query: str,
     top_k: Optional[int] = None,
 ) -> list[dict]:
+    """基于向量相似度检索与查询最相关的文档片段
+
+    使用 pgvector 的余弦距离操作符 <=> 进行排序，
+    返回 top_k 个最相似的文档片段及其相似度分数。
+    """
     if top_k is None:
         top_k = settings.RAG_TOP_K
 
+    # 对查询文本生成向量
     query_embedding = await embed_query(query)
     embedding_str = "[" + ",".join(str(v) for v in query_embedding) + "]"
 
+    # 使用 pgvector 余弦距离检索最相似的文档片段
     result = await db.execute(
         text("""
             SELECT
@@ -76,6 +97,7 @@ async def search_similar(
             "document_name": row[1],
             "chunk_index": row[2],
             "content": row[3],
+            # metadata 可能是 dict 或 JSON 字符串，统一处理为 dict
             "metadata": row[4] if isinstance(row[4], dict) else json.loads(row[4]) if row[4] else {},
             "similarity": float(row[5]),
         }
@@ -84,6 +106,7 @@ async def search_similar(
 
 
 async def get_existing_chunk_count(db: AsyncSession, document_name: str) -> int:
+    """查询指定文档名在数据库中已有的分块数量，用于避免重复入库"""
     result = await db.execute(
         text("SELECT COUNT(*) FROM document_chunks WHERE document_name = :doc_name"),
         {"doc_name": document_name},
