@@ -1,5 +1,11 @@
+<!--
+  ChatInput.vue - 聊天输入框组件
+  提供消息输入、发送、停止流式响应、一键清空等功能
+  支持自动高度调整、Enter 快捷发送、流式状态切换等交互
+-->
 <template>
   <div class="chat-input">
+    <!-- 消息输入框：支持自动高度调整和 Enter 快捷发送 -->
     <textarea
       ref="textareaRef"
       v-model="text"
@@ -22,7 +28,7 @@
         <line x1="6" y1="6" x2="18" y2="18"/>
       </svg>
     </button>
-    <!-- 发送按钮 -->
+    <!-- 发送按钮：非流式状态下显示 -->
     <button
       v-if="!isStreaming"
       class="chat-input__send"
@@ -33,7 +39,7 @@
         <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
       </svg>
     </button>
-    <!-- 停止按钮 -->
+    <!-- 停止按钮：流式响应进行中显示，用于中断生成 -->
     <button
       v-else
       class="chat-input__stop"
@@ -49,27 +55,34 @@
 <script setup>
 import { ref, nextTick } from 'vue'
 
+// 组件属性
 const props = defineProps({
-  disabled: { type: Boolean, default: false },
-  isStreaming: { type: Boolean, default: false },
+  disabled: { type: Boolean, default: false },    // 是否禁用输入
+  isStreaming: { type: Boolean, default: false },  // 是否正在流式响应中
 })
 
+// 组件事件
 const emit = defineEmits(['send', 'stop'])
 
+// 输入框文本内容和 DOM 引用
 const text = ref('')
 const textareaRef = ref(null)
 
+/** 发送消息：校验内容非空后触发 send 事件，并清空输入框 */
 function handleSend() {
   if (!text.value.trim() || props.disabled) return
   emit('send', text.value.trim())
   text.value = ''
+  // 清空后重新计算高度
   nextTick(autoResize)
 }
 
+/** 停止流式响应 */
 function handleStop() {
   emit('stop')
 }
 
+/** 清空输入框内容，并重新聚焦 */
 function handleClear() {
   text.value = ''
   nextTick(() => {
@@ -78,6 +91,7 @@ function handleClear() {
   })
 }
 
+/** 自动调整输入框高度：根据内容撑开，最大高度 150px */
 function autoResize() {
   const el = textareaRef.value
   if (!el) return
@@ -85,7 +99,7 @@ function autoResize() {
   el.style.height = Math.min(el.scrollHeight, 150) + 'px'
 }
 
-// 供父组件调用：写入内容并聚焦输入框
+/** 供父组件调用：写入内容并聚焦输入框 */
 function setText(value) {
   text.value = value ?? ''
   nextTick(() => {
@@ -99,11 +113,12 @@ function setText(value) {
   })
 }
 
-// 供父组件调用：聚焦输入框
+/** 供父组件调用：聚焦输入框 */
 function focus() {
   textareaRef.value?.focus()
 }
 
+// 暴露方法供父组件通过 ref 调用
 defineExpose({ setText, focus })
 </script>
 

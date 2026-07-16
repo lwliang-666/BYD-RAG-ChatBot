@@ -1,6 +1,13 @@
+<!--
+  ChatMessage.vue - 聊天消息气泡组件
+  根据消息角色（user/assistant）渲染不同样式的消息气泡
+  支持 Markdown 渲染、代码高亮、引用来源展示、复制和填入操作
+-->
 <template>
+  <!-- 根据消息角色应用不同样式：用户消息靠右，AI 消息靠左 -->
   <div :class="['chat-message', `chat-message--${message.role}`]">
     <div class="chat-message__avatar">
+      <!-- 用户头像：优先使用自定义头像，否则使用默认头像 -->
       <img
         v-if="message.role === 'user' && avatarUrl"
         :src="avatarUrl"
@@ -13,9 +20,11 @@
         alt="avatar"
         class="chat-message__avatar-img"
       />
+      <!-- AI 头像：渐变背景 + "AI" 文字 -->
       <div v-else class="chat-message__bot-avatar">AI</div>
     </div>
     <div class="chat-message__body">
+      <!-- 消息内容：使用 v-html 渲染 Markdown 转 HTML 后的内容 -->
       <div class="chat-message__content" v-html="renderedContent"></div>
       <!-- 用户消息的操作按钮：复制 / 填入输入框 -->
       <div v-if="message.role === 'user'" class="chat-message__actions">
@@ -24,6 +33,7 @@
           :title="copied ? '已复制' : '复制'"
           @click="handleCopy"
         >
+          <!-- 复制图标：已复制时显示勾选图标 -->
           <svg v-if="!copied" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
             <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
@@ -33,6 +43,7 @@
           </svg>
           <span class="chat-message__action-label">{{ copied ? '已复制' : '复制' }}</span>
         </button>
+        <!-- 填入按钮：将消息内容填入输入框，便于重新提问 -->
         <button
           class="chat-message__action-btn"
           title="填入输入框"
@@ -45,10 +56,12 @@
           <span class="chat-message__action-label">填入</span>
         </button>
       </div>
+      <!-- 引用来源区域：展示 RAG 检索到的文档片段 -->
       <div v-if="message.sources && message.sources.chunks?.length" class="chat-message__sources">
         <button class="chat-message__sources-toggle" @click="showSources = !showSources">
           {{ showSources ? '收起引用' : '查看引用' }} ({{ message.sources.chunks.length }})
         </button>
+        <!-- 引用来源列表 -->
         <div v-if="showSources" class="chat-message__sources-list">
           <div
             v-for="(chunk, idx) in message.sources.chunks"
@@ -72,24 +85,32 @@ import MarkdownIt from 'markdown-it'
 import hljs from 'highlight.js'
 import 'highlight.js/styles/github.css'
 
+// 组件属性
 const props = defineProps({
-  message: { type: Object, required: true },
-  avatarUrl: { type: String, default: '' },
+  message: { type: Object, required: true },  // 消息对象，包含 role、content、sources 等
+  avatarUrl: { type: String, default: '' },    // 用户头像 URL
 })
 
+// 组件事件
 const emit = defineEmits(['fill'])
 
+// 引用来源展开/收起状态
 const showSources = ref(false)
+// 复制按钮状态
 const copied = ref(false)
 let copyTimer = null
 
-// 复制到剪贴板，兼容非 https 场景（使用 execCommand 兜底）
+/**
+ * 复制消息内容到剪贴板
+ * 优先使用 Clipboard API，非 HTTPS 环境下使用 execCommand 兜底
+ */
 async function handleCopy() {
   const text = props.message.content || ''
   try {
     if (navigator.clipboard && window.isSecureContext) {
       await navigator.clipboard.writeText(text)
     } else {
+      // 非 HTTPS 环境：创建临时 textarea 执行复制
       const ta = document.createElement('textarea')
       ta.value = text
       ta.style.position = 'fixed'
@@ -99,6 +120,7 @@ async function handleCopy() {
       document.execCommand('copy')
       document.body.removeChild(ta)
     }
+    // 显示已复制状态，1.5 秒后恢复
     copied.value = true
     if (copyTimer) clearTimeout(copyTimer)
     copyTimer = setTimeout(() => {
@@ -109,10 +131,12 @@ async function handleCopy() {
   }
 }
 
+/** 触发 fill 事件，将消息内容填入父组件的输入框 */
 function handleFill() {
   emit('fill', props.message.content || '')
 }
 
+// Markdown 渲染器：配置代码高亮插件
 const md = new MarkdownIt({
   highlight(str, lang) {
     if (lang && hljs.getLanguage(lang)) {
@@ -124,6 +148,7 @@ const md = new MarkdownIt({
   },
 })
 
+// 计算属性：将消息内容渲染为 HTML
 const renderedContent = computed(() => md.render(props.message.content || ''))
 </script>
 
@@ -170,16 +195,19 @@ const renderedContent = computed(() => md.render(props.message.content || ''))
   line-height: 1.6;
   word-break: break-word;
 }
+/* 用户消息气泡样式 */
 .chat-message--user .chat-message__content {
   background: #4f46e5;
   color: #fff;
   border-bottom-right-radius: 4px;
 }
+/* AI 消息气泡样式 */
 .chat-message--assistant .chat-message__content {
   background: #f3f4f6;
   color: #1f2937;
   border-bottom-left-radius: 4px;
 }
+/* 代码块样式 */
 .chat-message__content :deep(pre) {
   background: #1e1e2e;
   color: #cdd6f4;
@@ -194,6 +222,7 @@ const renderedContent = computed(() => md.render(props.message.content || ''))
 .chat-message__content :deep(p) {
   margin: 4px 0;
 }
+/* 操作按钮：默认隐藏，悬停时显示 */
 .chat-message__actions {
   display: flex;
   gap: 6px;
@@ -202,7 +231,6 @@ const renderedContent = computed(() => md.render(props.message.content || ''))
   opacity: 0;
   transition: opacity 0.2s;
 }
-/* 用户气泡悬停时才显示操作按钮 */
 .chat-message--user:hover .chat-message__actions {
   opacity: 1;
 }
@@ -228,6 +256,7 @@ const renderedContent = computed(() => md.render(props.message.content || ''))
 .chat-message__action-label {
   font-size: 12px;
 }
+/* 引用来源样式 */
 .chat-message__sources {
   margin-top: 8px;
 }
