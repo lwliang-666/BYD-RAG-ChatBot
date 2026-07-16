@@ -1,3 +1,10 @@
+"""
+用户 ORM 模型模块
+
+定义 User 模型，存储用户的基本信息（用户名、显示名称、
+密码哈希、头像等），支持软删除，用户名在未删除记录中唯一。
+"""
+
 import uuid
 from datetime import datetime
 
@@ -9,6 +16,8 @@ from app.core.database import Base
 
 
 class User(Base):
+    """用户模型：存储系统用户信息"""
+
     __tablename__ = "users"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -21,5 +30,6 @@ class User(Base):
     updated_at: Mapped[datetime | None] = mapped_column(DateTime, onupdate=func.now())
 
     __table_args__ = (
+        # 部分唯一索引：仅在未删除的记录中保证用户名唯一
         Index("ix_users_username_active", "username", unique=True, postgresql_where=(is_deleted == False)),
     )
