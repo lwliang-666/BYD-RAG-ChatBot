@@ -1,3 +1,10 @@
+"""
+安全与认证工具模块
+
+提供密码哈希验证、JWT 令牌的创建与解码功能。
+密码使用 bcrypt 算法，JWT 使用 python-jose 库。
+"""
+
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -10,6 +17,10 @@ settings = get_settings()
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """验证明文密码与哈希密码是否匹配
+
+    bcrypt 限制密码长度为 72 字节，超出时抛出 ValueError。
+    """
     try:
         return bcrypt.checkpw(plain_password.encode("utf-8"), hashed_password.encode("utf-8"))
     except ValueError:
@@ -17,6 +28,10 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 
 def get_password_hash(password: str) -> str:
+    """对明文密码进行 bcrypt 哈希
+
+    密码超过 72 字节时抛出 ValueError。
+    """
     pwd_bytes = password.encode("utf-8")
     if len(pwd_bytes) > 72:
         raise ValueError("密码过长，最多支持72个字节")
@@ -24,6 +39,11 @@ def get_password_hash(password: str) -> str:
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
+    """创建访问令牌（access token）
+
+    默认有效期为 ACCESS_TOKEN_EXPIRE_MINUTES 配置值，
+    令牌类型标记为 "access"。
+    """
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + (
         expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -33,6 +53,11 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
 
 
 def create_refresh_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
+    """创建刷新令牌（refresh token）
+
+    默认有效期为 REFRESH_TOKEN_EXPIRE_DAYS 配置值，
+    令牌类型标记为 "refresh"。
+    """
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + (
         expires_delta or timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
@@ -42,6 +67,10 @@ def create_refresh_token(data: dict, expires_delta: Optional[timedelta] = None) 
 
 
 def decode_token(token: str) -> Optional[dict]:
+    """解码 JWT 令牌，返回载荷字典
+
+    令牌无效或过期时返回 None。
+    """
     try:
         payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
         return payload
