@@ -85,7 +85,7 @@
             @fill="handleFillInput"
           />
           <div v-if="chatStore.streamingContent" class="chat-message chat-message--assistant">
-            <div class="chat-message__bot-avatar">AI2</div>
+            <div class="chat-message__bot-avatar">AI</div>
             <div class="chat-message__body">
               <div class="chat-message__content" v-html="renderStreaming"></div>
             </div>
@@ -105,7 +105,7 @@
       </template>
       <template v-else>
         <div class="chat-main__empty">
-          <h2>BYD 智能问答助手</h2>
+          <h2>比亚迪驱逐舰05 智能问答助手</h2>
           <p>点击左侧"开启新对话"开始提问</p>
         </div>
       </template>
@@ -207,6 +207,8 @@ function scrollToBottom() {
 
 async function handleNewConversation() {
   await chatStore.newConversation()
+  // 新对话创建后自动聚焦输入框
+  nextTick(() => chatInputRef.value?.focus())
 }
 
 async function handleSend(content) {

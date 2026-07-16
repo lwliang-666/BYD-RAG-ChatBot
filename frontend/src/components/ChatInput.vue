@@ -99,7 +99,12 @@ function setText(value) {
   })
 }
 
-defineExpose({ setText })
+// 供父组件调用：聚焦输入框
+function focus() {
+  textareaRef.value?.focus()
+}
+
+defineExpose({ setText, focus })
 </script>
 
 <style scoped>
