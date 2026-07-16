@@ -4,6 +4,10 @@
 
 每次代码改动后必须立即 `git commit`，不要积攒多处改动后统一提交。commit message 根据实际修改内容编写，简洁明确，使用中文。
 
+## 修改规则
+
+每次代码改动后必须立即同步到 PROJECT_PLAN.md，保持 PROJECT_PLAN.md 与项目实际代码实时对齐。
+
 
 # 项目测试
 

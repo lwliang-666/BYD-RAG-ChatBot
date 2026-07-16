@@ -16,6 +16,7 @@ async def stream_chat(
     request: Request = None,
 ) -> AsyncGenerator[str, None]:
     await save_message(db, conversation_id, "user", user_message)
+    await db.commit()
 
     chat_history = await get_chat_history(db, conversation_id, limit=10)
 
@@ -25,6 +26,7 @@ async def stream_chat(
         if len(user_message) > 20:
             title += "..."
         await update_conversation_title(db, conversation_id, title)
+        await db.commit()
 
     full_answer = ""
     sources = None
@@ -47,7 +49,6 @@ async def stream_chat(
             sources = data.get("chunks", [])
             yield chunk
         elif chunk.startswith("event: done"):
-            # 先保存消息，获取 message_id 后再发送 done 事件
             pass
 
     # 保存已生成的回答（被停止时追加停止标记）
@@ -59,5 +60,6 @@ async def stream_chat(
             {"chunks": sources} if sources else None,
         )
         message_id = str(message.id)
+        await db.commit()
 
     yield f"event: done\ndata: {json.dumps({'message_id': message_id}, ensure_ascii=False)}\n\n"

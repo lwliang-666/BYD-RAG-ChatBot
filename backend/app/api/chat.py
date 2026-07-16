@@ -92,16 +92,15 @@ async def send_message(
         if not conversation:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="对话不存在")
 
-    # 流式响应使用独立 session，在 stream_chat 中管理生命周期
+    # 流式响应使用独立 session
+    # stream_chat 内部在关键节点 commit，确保客户端断开时消息已持久化
     async def stream_with_db():
-        async with AsyncSessionLocal() as db:
-            try:
-                async for chunk in stream_chat(db, conversation_id, data.content, request=request):
-                    yield chunk
-                await db.commit()
-            except Exception:
-                await db.rollback()
-                raise
+        db = AsyncSessionLocal()
+        try:
+            async for chunk in stream_chat(db, conversation_id, data.content, request=request):
+                yield chunk
+        finally:
+            await db.close()
 
     return StreamingResponse(
         stream_with_db(),
