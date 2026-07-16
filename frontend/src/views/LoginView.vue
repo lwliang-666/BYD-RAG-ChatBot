@@ -1,21 +1,30 @@
+<!--
+  LoginView.vue - 登录页面
+  提供用户名/密码登录表单，支持密码显示切换和错误提示
+-->
 <template>
   <div class="auth-page">
+    <!-- 品牌区域：产品名称和副标题 -->
     <div class="brand">
       <h1 class="brand__title">比亚迪驱逐舰05</h1>
       <div class="brand__divider"></div>
       <p class="brand__subtitle">智能问答助手</p>
     </div>
+    <!-- 登录表单卡片 -->
     <div class="auth-card">
       <h2 class="auth-card__title">登录</h2>
       <form class="auth-card__form" @submit.prevent="handleLogin">
+        <!-- 用户名输入 -->
         <div class="auth-card__field">
           <label>用户名</label>
           <input v-model="username" type="text" required minlength="3" maxlength="50" placeholder="请输入用户名" />
         </div>
+        <!-- 密码输入（含显示/隐藏切换） -->
         <div class="auth-card__field">
           <label>密码</label>
           <div class="auth-card__input-wrapper">
             <input v-model="password" :type="showPassword ? 'text' : 'password'" required minlength="6" maxlength="72" placeholder="请输入密码" />
+            <!-- 密码可见性切换按钮 -->
             <button type="button" class="auth-card__toggle-pwd" @click="showPassword = !showPassword" :aria-label="showPassword ? '隐藏密码' : '显示密码'">
               <!-- 眼睛打开：显示密码 -->
               <svg v-if="showPassword" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
@@ -32,11 +41,14 @@
             </button>
           </div>
         </div>
+        <!-- 错误提示 -->
         <p v-if="error" class="auth-card__error">{{ error }}</p>
+        <!-- 登录按钮 -->
         <button type="submit" class="auth-card__btn" :disabled="loading">
           {{ loading ? '登录中...' : '登录' }}
         </button>
       </form>
+      <!-- 跳转注册链接 -->
       <p class="auth-card__link">
         还没有账号？<router-link to="/register">立即注册</router-link>
       </p>
@@ -52,17 +64,20 @@ import { useAuthStore } from '../stores/auth'
 const router = useRouter()
 const authStore = useAuthStore()
 
+// 表单数据
 const username = ref('')
 const password = ref('')
 const error = ref('')
 const loading = ref(false)
 const showPassword = ref(false)
 
+/** 处理登录表单提交 */
 async function handleLogin() {
   error.value = ''
   loading.value = true
   try {
     await authStore.login(username.value, password.value)
+    // 登录成功，跳转到聊天主页
     router.push('/')
   } catch (e) {
     error.value = '用户名或密码错误'
@@ -130,6 +145,7 @@ async function handleLogin() {
   text-shadow: 0 4px 20px rgba(255, 255, 255, 0.15);
   filter: drop-shadow(0 6px 24px rgba(124, 58, 237, 0.45));
 }
+/* 品牌分隔线：渐变线条 + 中心光点 */
 .brand__divider {
   width: 160px;
   height: 2px;
@@ -214,6 +230,7 @@ async function handleLogin() {
 .auth-card__input-wrapper input:focus {
   border-color: #4f46e5;
 }
+/* 密码可见性切换按钮 */
 .auth-card__toggle-pwd {
   position: absolute;
   right: 8px;

@@ -1,16 +1,24 @@
+<!--
+  RegisterView.vue - 注册页面
+  提供用户名/密码/确认密码注册表单，支持密码显示切换和错误提示
+-->
 <template>
   <div class="auth-page">
+    <!-- 注册表单卡片 -->
     <div class="auth-card">
       <h2 class="auth-card__title">注册</h2>
       <form class="auth-card__form" @submit.prevent="handleRegister">
+        <!-- 用户名输入 -->
         <div class="auth-card__field">
           <label>用户名</label>
           <input v-model="username" type="text" required minlength="3" maxlength="50" placeholder="请输入用户名" />
         </div>
+        <!-- 密码输入（含显示/隐藏切换） -->
         <div class="auth-card__field">
           <label>密码</label>
           <div class="auth-card__input-wrapper">
             <input v-model="password" :type="showPassword ? 'text' : 'password'" required minlength="6" maxlength="72" placeholder="请输入密码" />
+            <!-- 密码可见性切换按钮 -->
             <button type="button" class="auth-card__toggle-pwd" @click="showPassword = !showPassword" :aria-label="showPassword ? '隐藏密码' : '显示密码'">
               <svg v-if="showPassword" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
@@ -25,6 +33,7 @@
             </button>
           </div>
         </div>
+        <!-- 确认密码输入（含显示/隐藏切换） -->
         <div class="auth-card__field">
           <label>确认密码</label>
           <div class="auth-card__input-wrapper">
@@ -43,11 +52,14 @@
             </button>
           </div>
         </div>
+        <!-- 错误提示 -->
         <p v-if="error" class="auth-card__error">{{ error }}</p>
+        <!-- 注册按钮 -->
         <button type="submit" class="auth-card__btn" :disabled="loading">
           {{ loading ? '注册中...' : '注册' }}
         </button>
       </form>
+      <!-- 跳转登录链接 -->
       <p class="auth-card__link">
         已有账号？<router-link to="/login">立即登录</router-link>
       </p>
@@ -63,6 +75,7 @@ import { useAuthStore } from '../stores/auth'
 const router = useRouter()
 const authStore = useAuthStore()
 
+// 表单数据
 const username = ref('')
 const password = ref('')
 const confirmPassword = ref('')
@@ -71,8 +84,10 @@ const loading = ref(false)
 const showPassword = ref(false)
 const showConfirmPassword = ref(false)
 
+/** 处理注册表单提交 */
 async function handleRegister() {
   error.value = ''
+  // 前端校验：两次密码是否一致
   if (password.value !== confirmPassword.value) {
     error.value = '两次输入的密码不一致'
     return
@@ -80,8 +95,10 @@ async function handleRegister() {
   loading.value = true
   try {
     await authStore.register(username.value, password.value)
+    // 注册成功，跳转到聊天主页
     router.push('/')
   } catch (e) {
+    // 优先显示后端返回的错误信息
     const detail = e.response?.data?.detail
     error.value = detail || '注册失败，请稍后再试'
   } finally {
@@ -151,6 +168,7 @@ async function handleRegister() {
 .auth-card__input-wrapper input:focus {
   border-color: #4f46e5;
 }
+/* 密码可见性切换按钮 */
 .auth-card__toggle-pwd {
   position: absolute;
   right: 8px;
