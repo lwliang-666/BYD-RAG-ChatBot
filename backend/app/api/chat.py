@@ -14,9 +14,9 @@ from app.schemas.chat import (
 )
 from app.services.chat_service import (
     create_conversation, get_conversations, get_conversation_detail,
-    update_conversation, delete_conversation,
+    update_conversation, delete_conversation, save_message,
 )
-from app.services.rag_service import stream_chat
+from app.services.rag_service import stream_chat, StreamState
 
 router = APIRouter(prefix="/api/chat", tags=["对话"])
 
@@ -94,12 +94,22 @@ async def send_message(
 
     # 流式响应使用独立 session
     # stream_chat 内部在关键节点 commit，确保客户端断开时消息已持久化
+    # 助手回答保存在 finally 中，确保客户端中断时也能持久化已生成内容
     async def stream_with_db():
         db = AsyncSessionLocal()
+        state = StreamState()
         try:
-            async for chunk in stream_chat(db, conversation_id, data.content, request=request):
+            async for chunk in stream_chat(db, conversation_id, data.content, request=request, stream_state=state):
                 yield chunk
         finally:
+            # 无论正常完成还是客户端中断，都保存已生成的助手回答
+            if state.full_answer:
+                answer = state.full_answer + "\n\n*[对话已停止]*" if state.stopped else state.full_answer
+                await save_message(
+                    db, state.conversation_id, "assistant", answer,
+                    {"chunks": state.sources} if state.sources else None,
+                )
+                await db.commit()
             await db.close()
 
     return StreamingResponse(

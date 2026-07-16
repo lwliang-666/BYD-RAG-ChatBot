@@ -9,11 +9,22 @@ from app.rag.graph import stream_rag_answer
 from app.services.chat_service import save_message, get_chat_history, update_conversation_title
 
 
+class StreamState:
+    """流式回答的状态跟踪，供外部消费者在生成器被中断时保存已生成内容"""
+
+    def __init__(self):
+        self.full_answer = ""
+        self.sources = None
+        self.stopped = False
+        self.conversation_id = None
+
+
 async def stream_chat(
     db: AsyncSession,
     conversation_id: uuid.UUID,
     user_message: str,
     request: Request = None,
+    stream_state: StreamState = None,
 ) -> AsyncGenerator[str, None]:
     await save_message(db, conversation_id, "user", user_message)
     await db.commit()
@@ -28,38 +39,32 @@ async def stream_chat(
         await update_conversation_title(db, conversation_id, title)
         await db.commit()
 
-    full_answer = ""
-    sources = None
-    stopped = False
+    # 初始化流状态跟踪
+    if stream_state is not None:
+        stream_state.conversation_id = conversation_id
 
     async for chunk in stream_rag_answer(user_message, db, chat_history):
         # 检查客户端是否已断开连接
         if request and await request.is_disconnected():
-            stopped = True
+            if stream_state is not None:
+                stream_state.stopped = True
             break
 
         if chunk.startswith("event: token"):
             data_start = chunk.index("data: ") + 6
             data = json.loads(chunk[data_start:chunk.index("\n\n", data_start)])
-            full_answer += data.get("content", "")
+            content = data.get("content", "")
+            if stream_state is not None:
+                stream_state.full_answer += content
             yield chunk
         elif chunk.startswith("event: sources"):
             data_start = chunk.index("data: ") + 6
             data = json.loads(chunk[data_start:chunk.index("\n\n", data_start)])
-            sources = data.get("chunks", [])
+            if stream_state is not None:
+                stream_state.sources = data.get("chunks", [])
             yield chunk
         elif chunk.startswith("event: done"):
             pass
 
-    # 保存已生成的回答（被停止时追加停止标记）
-    message_id = None
-    if full_answer:
-        answer = full_answer + "\n\n*[对话已停止]*" if stopped else full_answer
-        message = await save_message(
-            db, conversation_id, "assistant", answer,
-            {"chunks": sources} if sources else None,
-        )
-        message_id = str(message.id)
-        await db.commit()
-
-    yield f"event: done\ndata: {json.dumps({'message_id': message_id}, ensure_ascii=False)}\n\n"
+    # 正常完成时的 done 事件（被中断时不会执行到这里，由外部 finally 处理保存）
+    yield f"event: done\ndata: {{}}\n\n"

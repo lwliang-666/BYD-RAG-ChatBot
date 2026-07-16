@@ -84,7 +84,7 @@
             :avatar-url="userStore.avatarUrl"
           />
           <div v-if="chatStore.streamingContent" class="chat-message chat-message--assistant">
-            <div class="chat-message__bot-avatar">AI</div>
+            <div class="chat-message__bot-avatar">AI2</div>
             <div class="chat-message__body">
               <div class="chat-message__content" v-html="renderStreaming"></div>
             </div>
