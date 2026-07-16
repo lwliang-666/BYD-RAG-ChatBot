@@ -10,6 +10,18 @@
       @keydown.enter.exact.prevent="handleSend"
       @input="autoResize"
     ></textarea>
+    <!-- 清空按钮：输入框有内容时显示 -->
+    <button
+      v-if="text.trim()"
+      class="chat-input__clear"
+      title="清空输入"
+      @click="handleClear"
+    >
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="18" y1="6" x2="6" y2="18"/>
+        <line x1="6" y1="6" x2="18" y2="18"/>
+      </svg>
+    </button>
     <!-- 发送按钮 -->
     <button
       v-if="!isStreaming"
@@ -56,6 +68,14 @@ function handleSend() {
 
 function handleStop() {
   emit('stop')
+}
+
+function handleClear() {
+  text.value = ''
+  nextTick(() => {
+    autoResize()
+    textareaRef.value?.focus()
+  })
 }
 
 function autoResize() {
@@ -114,6 +134,25 @@ defineExpose({ setText })
 .chat-input__textarea:disabled {
   background: #f9fafb;
   cursor: not-allowed;
+}
+.chat-input__clear {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  background: #fff;
+  color: #9ca3af;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+  flex-shrink: 0;
+}
+.chat-input__clear:hover {
+  color: #ef4444;
+  border-color: #fca5a5;
+  background: #fef2f2;
 }
 .chat-input__send {
   width: 40px;

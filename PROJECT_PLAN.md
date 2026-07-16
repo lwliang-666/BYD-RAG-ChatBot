@@ -468,6 +468,7 @@ flowchart LR
   - 多行输入框(Enter 发送, Shift+Enter 换行)
   - 发送按钮(发送中禁用)
   - 暴露 setText 方法供外部填入内容
+  - 清空按钮(输入框有内容时显示, 点击清空并聚焦)
 - SSE 流式接收:
   - 使用 EventSource 或 fetch + ReadableStream
   - 逐字追加 AI 回答内容
