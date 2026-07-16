@@ -1,11 +1,17 @@
+<!--
+  ChatView.vue - 聊天主页面
+  包含左侧对话列表边栏和右侧消息区域，是应用的核心交互页面
+  功能：对话管理（新建/重命名/置顶/删除）、消息发送与流式接收、用户资料编辑
+-->
 <template>
   <div class="chat-layout">
-    <!-- 左侧边栏 -->
+    <!-- 左侧边栏：对话列表 + 用户信息 -->
     <aside class="sidebar">
       <div class="sidebar__header">
         <h2 class="sidebar__title">比亚迪驱逐舰05 智能问答助手</h2>
         <button class="sidebar__new-btn" @click="handleNewConversation">+ 开启新对话</button>
       </div>
+      <!-- 对话列表 -->
       <div class="sidebar__list">
         <div
           v-for="conv in chatStore.conversations"
@@ -13,7 +19,9 @@
           :class="['sidebar__item', { 'sidebar__item--active': chatStore.currentConversation === conv.id }]"
           @click="chatStore.selectConversation(conv.id)"
         >
+          <!-- 置顶图标 -->
           <span v-if="conv.is_pinned" class="sidebar__pin-icon">📌</span>
+          <!-- 重命名编辑模式 -->
           <template v-if="renamingConvId === conv.id">
             <input
               ref="renameInputRef"
@@ -25,8 +33,10 @@
               @click.stop
             />
           </template>
+          <!-- 正常显示模式 -->
           <template v-else>
             <span class="sidebar__item-title">{{ conv.title }}</span>
+            <!-- 更多操作按钮：点击弹出上下文菜单 -->
             <button class="sidebar__item-more" @click.stop="openContextMenu($event, conv)">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                 <circle cx="5" cy="12" r="2"/>
@@ -37,12 +47,14 @@
           </template>
         </div>
       </div>
+      <!-- 底部用户信息区：头像 + 显示名 + 退出按钮 -->
       <div class="sidebar__footer">
         <AvatarUpload
           :model-value="userStore.avatarUrl"
           @upload="handleAvatarUpload"
         />
         <div class="sidebar__user-info">
+          <!-- 编辑显示名模式 -->
           <template v-if="isEditingName">
             <input
               ref="nameInputRef"
@@ -52,6 +64,7 @@
               @keydown.enter="handleNameSave"
             />
           </template>
+          <!-- 显示名展示模式：双击可编辑 -->
           <template v-else>
             <span class="sidebar__username" @dblclick="startEditName">
               {{ userStore.displayName || userStore.username }}
@@ -68,14 +81,16 @@
       </div>
     </aside>
 
-    <!-- 右侧主区域 -->
+    <!-- 右侧主区域：消息展示 + 输入框 -->
     <main class="chat-main">
+      <!-- 已选中对话时显示消息区域 -->
       <template v-if="chatStore.currentConversation">
         <div class="chat-main__header">
           <h3 class="chat-main__title">
             {{ currentConvTitle }}
           </h3>
         </div>
+        <!-- 消息列表 -->
         <div class="chat-main__messages" ref="messagesRef">
           <ChatMessage
             v-for="msg in chatStore.messages"
@@ -84,12 +99,14 @@
             :avatar-url="userStore.avatarUrl"
             @fill="handleFillInput"
           />
+          <!-- 流式响应中的实时内容 -->
           <div v-if="chatStore.streamingContent" class="chat-message chat-message--assistant">
             <div class="chat-message__bot-avatar">AI</div>
             <div class="chat-message__body">
               <div class="chat-message__content" v-html="renderStreaming"></div>
             </div>
           </div>
+          <!-- 等待响应时的加载动画 -->
           <div v-else-if="chatStore.isSending" class="chat-message chat-message--assistant">
             <div class="chat-message__bot-avatar">AI</div>
             <div class="chat-message__body">
@@ -103,6 +120,7 @@
         </div>
         <ChatInput ref="chatInputRef" :disabled="chatStore.isSending" :is-streaming="chatStore.isSending" @send="handleSend" @stop="handleStop" />
       </template>
+      <!-- 未选中对话时显示空状态提示 -->
       <template v-else>
         <div class="chat-main__empty">
           <h2>比亚迪驱逐舰05 智能问答助手</h2>
@@ -111,7 +129,7 @@
       </template>
     </main>
 
-    <!-- 操作菜单 -->
+    <!-- 右键操作菜单：重命名 / 置顶 / 删除 -->
     <div
       v-if="contextMenu.visible"
       class="context-menu"
@@ -162,36 +180,48 @@ const authStore = useAuthStore()
 const chatStore = useChatStore()
 const userStore = useUserStore()
 
-const messagesRef = ref(null)
-const chatInputRef = ref(null)
-const nameInputRef = ref(null)
+// DOM 引用
+const messagesRef = ref(null)       // 消息列表容器，用于自动滚动到底部
+const chatInputRef = ref(null)      // 输入框组件引用
+const nameInputRef = ref(null)      // 显示名编辑输入框引用
+
+// 用户名编辑状态
 const isEditingName = ref(false)
 const editingName = ref('')
 
+// 右键菜单状态
 const contextMenu = ref({ visible: false, x: 0, y: 0, conv: null })
+
+// 对话重命名状态
 const renamingConvId = ref(null)
 const renamingTitle = ref('')
 const renameInputRef = ref(null)
-let renameConfirming = false
+let renameConfirming = false  // 防止 blur 和 enter 重复触发确认
 
+// Markdown 渲染器（用于流式内容的实时渲染）
 const md = new MarkdownIt()
 
+/** 流式内容的 Markdown 渲染结果 */
 const renderStreaming = computed(() => md.render(chatStore.streamingContent || ''))
 
+/** 当前对话标题 */
 const currentConvTitle = computed(() => {
   const conv = chatStore.conversations.find((c) => c.id === chatStore.currentConversation)
   return conv?.title || '新对话'
 })
 
+// 页面挂载时加载用户资料和对话列表
 onMounted(async () => {
   await userStore.fetchProfile()
   await chatStore.fetchConversations()
 })
 
+// 全局点击事件：关闭右键菜单
 document.addEventListener('click', () => {
   contextMenu.value.visible = false
 })
 
+// 监听消息数量变化，自动滚动到底部
 watch(
   () => chatStore.messages.length,
   () => {
@@ -199,62 +229,76 @@ watch(
   }
 )
 
+/** 滚动消息列表到底部 */
 function scrollToBottom() {
   if (messagesRef.value) {
     messagesRef.value.scrollTop = messagesRef.value.scrollHeight
   }
 }
 
+/** 创建新对话并自动聚焦输入框 */
 async function handleNewConversation() {
   await chatStore.newConversation()
-  // 新对话创建后自动聚焦输入框
   nextTick(() => chatInputRef.value?.focus())
 }
 
+/**
+ * 发送消息并处理 SSE 流式响应
+ * 解析服务端推送的 token/sources/done 事件，实时更新流式内容
+ */
 async function handleSend(content) {
   if (!chatStore.currentConversation) return
   chatStore.isSending = true
   chatStore.streamingContent = ''
 
-  // 创建 AbortController
+  // 创建 AbortController，用于用户主动中断流式请求
   const controller = new AbortController()
   chatStore.abortController = controller
 
+  // 先将用户消息添加到消息列表
   chatStore.addMessage('user', content)
 
   try {
+    // 发起 SSE 流式请求
     const response = await sendMessage(chatStore.currentConversation, content, controller.signal)
     const reader = response.body.getReader()
     const decoder = new TextDecoder()
     let fullContent = ''
     let lastSources = null
 
+    // 逐块读取流式响应
     while (true) {
       const { done, value } = await reader.read()
       if (done) break
       const text = decoder.decode(value, { stream: true })
       const lines = text.split('\n')
 
+      // 解析 SSE 事件格式
       let currentEvent = ''
       for (const line of lines) {
         if (line.startsWith('event: ')) {
+          // 事件类型行
           currentEvent = line.slice(7).trim()
         } else if (line.startsWith('data: ')) {
+          // 事件数据行
           try {
             const data = JSON.parse(line.slice(6))
             if (currentEvent === 'token' && data.content) {
+              // token 事件：追加流式文本内容
               fullContent += data.content
               chatStore.streamingContent = fullContent
             } else if (currentEvent === 'sources' && data.chunks) {
+              // sources 事件：保存 RAG 检索的引用来源
               lastSources = data.chunks
             } else if (currentEvent === 'done') {
-              // stream complete
+              // done 事件：流式响应完成
             }
           } catch {}
         }
       }
     }
 
+    // 流式响应完成，将完整内容作为正式消息保存
     chatStore.addMessage('assistant', fullContent, lastSources ? { chunks: lastSources } : null)
     chatStore.streamingContent = ''
   } catch (e) {
@@ -265,6 +309,7 @@ async function handleSend(content) {
       }
       chatStore.streamingContent = ''
     } else {
+      // 其他错误，显示错误提示
       chatStore.addMessage('assistant', '抱歉，发生了错误，请稍后再试。')
       chatStore.streamingContent = ''
     }
@@ -276,27 +321,30 @@ async function handleSend(content) {
   }
 }
 
+/** 停止流式响应：中断正在进行的请求 */
 function handleStop() {
   if (chatStore.abortController) {
     chatStore.abortController.abort()
   }
 }
 
-// 将用户历史消息填入输入框，便于重新提问或编辑
+/** 将用户历史消息填入输入框，便于重新提问或编辑 */
 function handleFillInput(content) {
   chatInputRef.value?.setText(content)
 }
 
+/** 打开对话右键操作菜单 */
 function openContextMenu(e, conv) {
   const rect = e.currentTarget.getBoundingClientRect()
   contextMenu.value = {
     visible: true,
-    x: rect.right - 140,
-    y: rect.bottom + 4,
+    x: rect.right - 140,  // 菜单右对齐到按钮右边缘
+    y: rect.bottom + 4,   // 菜单出现在按钮下方
     conv,
   }
 }
 
+/** 进入对话重命名模式 */
 async function handleRename() {
   const conv = contextMenu.value.conv
   contextMenu.value.visible = false
@@ -304,16 +352,20 @@ async function handleRename() {
   renamingConvId.value = conv.id
   renamingTitle.value = conv.title
   await nextTick()
+  // 聚焦重命名输入框
   const inputs = document.querySelectorAll('.sidebar__rename-input')
   if (inputs.length) inputs[inputs.length - 1].focus()
 }
 
+/** 确认重命名对话 */
 async function confirmRename() {
+  // 防止 blur 和 enter 重复触发
   if (renameConfirming) return
   renameConfirming = true
   const convId = renamingConvId.value
   const title = renamingTitle.value.trim()
   renamingConvId.value = null
+  // 标题有效且发生变化时才调用接口更新
   if (convId && title) {
     const conv = chatStore.conversations.find((c) => c.id === convId)
     if (conv && conv.title !== title) {
@@ -323,10 +375,12 @@ async function confirmRename() {
   renameConfirming = false
 }
 
+/** 取消重命名 */
 function cancelRename() {
   renamingConvId.value = null
 }
 
+/** 切换对话置顶状态 */
 async function handleTogglePin() {
   const conv = contextMenu.value.conv
   if (!conv) return
@@ -334,6 +388,7 @@ async function handleTogglePin() {
   contextMenu.value.visible = false
 }
 
+/** 删除对话（需用户确认） */
 async function handleDelete() {
   const conv = contextMenu.value.conv
   if (!conv) return
@@ -343,12 +398,14 @@ async function handleDelete() {
   contextMenu.value.visible = false
 }
 
+/** 进入显示名编辑模式 */
 function startEditName() {
   editingName.value = userStore.displayName || userStore.username
   isEditingName.value = true
   nextTick(() => nameInputRef.value?.focus())
 }
 
+/** 保存显示名修改 */
 async function handleNameSave() {
   isEditingName.value = false
   const newName = editingName.value.trim()
@@ -358,12 +415,14 @@ async function handleNameSave() {
   } catch {}
 }
 
+/** 处理头像上传 */
 async function handleAvatarUpload(file) {
   try {
     await userStore.changeAvatar(file)
   } catch {}
 }
 
+/** 退出登录 */
 function handleLogout() {
   authStore.logout()
   router.push('/login')
@@ -454,6 +513,7 @@ function handleLogout() {
   border-radius: 4px;
   flex-shrink: 0;
 }
+/* 悬停时显示更多操作按钮 */
 .sidebar__item:hover .sidebar__item-more {
   display: flex;
 }
@@ -472,7 +532,6 @@ function handleLogout() {
   font-family: inherit;
 }
 .sidebar__footer {
-  /* padding: 16px; */
   height: 75px;
   padding: 0 16px;
   border-top: 1px solid #e5e7eb;
@@ -568,6 +627,7 @@ function handleLogout() {
 .chat-main__empty p {
   font-size: 14px;
 }
+/* 流式响应中的 AI 消息样式 */
 .chat-message {
   display: flex;
   gap: 12px;
@@ -602,6 +662,7 @@ function handleLogout() {
   color: #1f2937;
   border-bottom-left-radius: 4px;
 }
+/* 加载动画：三个跳动的圆点 */
 .chat-message__loading {
   display: flex;
   align-items: center;
@@ -631,6 +692,7 @@ function handleLogout() {
     opacity: 1;
   }
 }
+/* 右键菜单样式 */
 .context-menu {
   position: fixed;
   background: #fff;
@@ -660,6 +722,7 @@ function handleLogout() {
 .context-menu__icon {
   flex-shrink: 0;
 }
+/* 删除按钮危险样式 */
 .context-menu__danger {
   color: #ef4444 !important;
 }
