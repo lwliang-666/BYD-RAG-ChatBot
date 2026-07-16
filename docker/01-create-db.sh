@@ -1,4 +1,7 @@
 #!/bin/bash
+# 01-create-db.sh - 数据库初始化脚本
+# 在 PolarDB-PG 容器首次启动时自动执行
+# 功能：创建 UTF8 编码的 byd_rag 数据库，并执行建表脚本
 set -e
 
 # 创建 UTF8 编码的 byd_rag 数据库（如果不存在）
