@@ -9,7 +9,7 @@
 lwliang.com → Vercel (前端静态托管, 自动 HTTPS + CDN)
     |  /api/*  /uploads/*
     v
-api.lwliang.com → 云服务器 (Nginx 反向代理)
+api.lwliang.com:8443 → 云服务器 (Nginx 反向代理)
     |
     v
 127.0.0.1:8000 → FastAPI + Uvicorn
@@ -19,6 +19,8 @@ api.lwliang.com → 云服务器 (Nginx 反向代理)
 ```
 
 部署策略：前端部署到 Vercel（免费静态托管 + 自动 HTTPS + CDN），后端和数据库部署到云服务器。
+
+> **非备案说明**：服务器未备案，不能使用 80/443 端口。后端 API 使用 8443 端口，访问地址为 `https://api.lwliang.com:8443`。前端在 Vercel 上不受影响，正常使用 `https://lwliang.com`。
 
 ---
 
@@ -45,7 +47,7 @@ api.lwliang.com → 云服务器 (Nginx 反向代理)
 | 用途 | 域名 | 指向 |
 |------|------|------|
 | 前端页面 | `lwliang.com` | Vercel |
-| 后端 API | `api.lwliang.com` | 云服务器 |
+| 后端 API | `api.lwliang.com:8443` | 云服务器 (49.233.127.241) |
 
 ### 1.3 本地确认项目可运行
 
@@ -74,7 +76,7 @@ make frontend
 ### 2.1 SSH 登录服务器
 
 ```bash
-ssh root@<服务器IP>
+ssh root@49.233.127.241
 ```
 
 ### 2.2 安装基础工具
@@ -123,7 +125,7 @@ systemctl enable nginx
 
 ```bash
 # 将 docker 目录上传到服务器
-scp -r docker/ root@<服务器IP>:/opt/byd-rag/
+scp -r docker/ root@49.233.127.241:/opt/byd-rag/
 ```
 
 ### 3.2 修改 docker-compose.yml
@@ -325,8 +327,13 @@ vim /etc/nginx/sites-available/byd-rag
 
 ```nginx
 server {
-    listen 80;
+    # 非备案服务器，监听 8443 端口而非 443
+    listen 8443 ssl;
     server_name api.lwliang.com;
+
+    # SSL 证书路径（Certbot 申请后自动生成）
+    ssl_certificate /etc/letsencrypt/live/api.lwliang.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/api.lwliang.com/privkey.pem;
 
     # 请求体大小限制（头像上传）
     client_max_body_size 5M;
@@ -358,6 +365,13 @@ server {
     location /health {
         proxy_pass http://127.0.0.1:8000/health;
     }
+}
+
+# HTTP 8443 端口重定向到 HTTPS（用于 Certbot 验证和兼容）
+server {
+    listen 8443;
+    server_name api.lwliang.com;
+    return 301 https://$host:8443$request_uri;
 }
 ```
 
@@ -391,7 +405,7 @@ systemctl reload nginx
 |------|------|-----|------|
 | A | `@` | `76.76.21.21` | Vercel 的 Anycast IP（前端） |
 | CNAME | `www` | `cname.vercel-dns.com` | www 子域名（前端） |
-| A | `api` | `<云服务器公网IP>` | 后端 API 服务器 |
+| A | `api` | `49.233.127.241` | 后端 API 服务器 |
 
 > 添加 `api` 的 A 记录后，`api.lwliang.com` 就会指向你的云服务器。
 
@@ -401,6 +415,9 @@ systemctl reload nginx
 # 在本地检查 DNS 解析
 dig api.lwliang.com
 dig lwliang.com
+
+# 检查 8443 端口是否可达（部署 Nginx 后）
+curl -k https://api.lwliang.com:8443/health
 
 # 通常几分钟到几小时生效
 ```
@@ -413,19 +430,29 @@ dig lwliang.com
 
 Vercel 自动为 `lwliang.com` 提供 HTTPS 证书，无需手动配置。
 
-### 7.2 后端 HTTPS（api.lwliang.com）
+### 7.2 后端 HTTPS（api.lwliang.com:8443）
 
-在云服务器上安装 Certbot 并申请证书：
+非备案服务器使用 8443 端口，Certbot 默认用 80 端口验证域名，需要手动申请证书：
 
 ```bash
 # 安装 Certbot
-apt install -y certbot python3-certbot-nginx
+apt install -y certbot
 
-# 为 api.lwliang.com 申请证书
-certbot --nginx -d api.lwliang.com
+# 手动申请证书（使用 DNS 验证方式，不依赖 80 端口）
+certbot certonly --manual --preferred-challenges dns -d api.lwliang.com
 ```
 
-按提示操作，Certbot 会自动修改 Nginx 配置并启用 HTTPS。
+按提示操作：
+1. Certbot 会给出一个 TXT 记录值
+2. 去 Vercel DNS 设置中添加一条 TXT 记录：`_acme-challenge.api.lwliang.com` = `<Certbot 给的值>`
+3. 等待 DNS 生效后按回车继续
+4. 证书会生成在 `/etc/letsencrypt/live/api.lwliang.com/`
+
+证书申请成功后，Nginx 配置中已预设了 SSL 证书路径，重载 Nginx 即可：
+
+```bash
+nginx -t && systemctl reload nginx
+```
 
 ### 7.3 设置自动续期
 
@@ -492,7 +519,7 @@ app.add_middleware(
 创建 `frontend/.env.production`：
 
 ```
-VITE_API_BASE_URL=https://api.lwliang.com
+VITE_API_BASE_URL=https://api.lwliang.com:8443
 ```
 
 ### 8.5 推送代码到 GitHub
@@ -516,7 +543,7 @@ git push origin main
    - Build Command: `pnpm build`
    - Output Directory: `dist`
 6. 在 Environment Variables 中添加：
-   - `VITE_API_BASE_URL` = `https://api.lwliang.com`
+   - `VITE_API_BASE_URL` = `https://api.lwliang.com:8443`
 7. 点击 "Deploy"
 
 ### 8.7 绑定域名
@@ -536,8 +563,8 @@ git push origin main
 curl http://127.0.0.1:8000/health
 # 应返回 {"status":"ok"}
 
-# 从外部检查
-curl https://api.lwliang.com/health
+# 从外部检查（HTTPS 证书配置后）
+curl https://api.lwliang.com:8443/health
 ```
 
 ### 9.2 检查前端
@@ -613,13 +640,14 @@ python -m scripts.ingest
 ### 11.1 服务器防火墙
 
 ```bash
-# 仅开放必要端口
+# 仅开放必要端口（非备案服务器，8443 替代 443）
 ufw default deny incoming
 ufw allow ssh
-ufw allow http
-ufw allow https
+ufw allow 8443/tcp
 ufw enable
 ```
+
+> **腾讯云安全组**：还需要在腾讯云控制台的安全组中放行 8443 端口。路径：云服务器控制台 > 安全组 > 入站规则 > 添加规则：TCP 协议，端口 8443，来源 0.0.0.0/0。
 
 ### 11.2 SSH 加固
 
@@ -654,12 +682,12 @@ systemctl restart sshd
 - [ ] `.env` 配置正确（数据库密码、JWT 密钥、API Key）
 - [ ] PDF 文档已入库
 - [ ] Systemd 服务已配置并正常运行
-- [ ] Nginx 反向代理已配置（api.lwliang.com）
-- [ ] Vercel DNS 记录已添加（@、www、api）
-- [ ] HTTPS 证书已申请（api.lwliang.com）并自动续期
+- [ ] Nginx 反向代理已配置（api.lwliang.com:8443）
+- [ ] Vercel DNS 记录已添加（@、www、api 指向 49.233.127.241）
+- [ ] HTTPS 证书已申请（api.lwliang.com，DNS 验证方式）并自动续期
 - [ ] 前端已部署到 Vercel（lwliang.com）
 - [ ] CORS 配置已更新允许 lwliang.com
-- [ ] 前端环境变量 `VITE_API_BASE_URL=https://api.lwliang.com` 已设置
+- [ ] 前端环境变量 `VITE_API_BASE_URL=https://api.lwliang.com:8443` 已设置
 - [ ] 防火墙已配置
 - [ ] SSH 已加固
 - [ ] 数据库定时备份已设置
