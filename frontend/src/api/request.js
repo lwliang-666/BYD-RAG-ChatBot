@@ -8,7 +8,7 @@ import axios from 'axios'
 
 // 创建 axios 实例，设置基础超时时间
 const api = axios.create({
-  baseURL: '',
+  baseURL: import.meta.env.VITE_API_BASE_URL || '',
   timeout: 30000,
 })
 

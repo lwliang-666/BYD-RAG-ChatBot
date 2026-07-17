@@ -96,7 +96,12 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 # 配置 CORS 中间件，仅允许前端开发服务器访问
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "https://lwliang.com",
+        "https://www.lwliang.com",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
