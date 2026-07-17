@@ -5,50 +5,57 @@
 -->
 <template>
   <div class="chat-input">
-    <!-- 消息输入框：支持自动高度调整和 Enter 快捷发送 -->
-    <textarea
-      ref="textareaRef"
-      v-model="text"
-      class="chat-input__textarea"
-      placeholder="输入您的问题..."
-      rows="1"
-      :disabled="disabled"
-      @keydown.enter.exact.prevent="handleSend"
-      @input="autoResize"
-    ></textarea>
-    <!-- 清空按钮：输入框有内容时显示 -->
-    <button
-      v-if="text.trim()"
-      class="chat-input__clear"
-      title="清空输入"
-      @click="handleClear"
-    >
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <line x1="18" y1="6" x2="6" y2="18"/>
-        <line x1="6" y1="6" x2="18" y2="18"/>
-      </svg>
-    </button>
-    <!-- 发送按钮：非流式状态下显示 -->
-    <button
-      v-if="!isStreaming"
-      class="chat-input__send"
-      :disabled="disabled || !text.trim()"
-      @click="handleSend"
-    >
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
-      </svg>
-    </button>
-    <!-- 停止按钮：流式响应进行中显示，用于中断生成 -->
-    <button
-      v-else
-      class="chat-input__stop"
-      @click="handleStop"
-    >
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-        <rect x="6" y="6" width="12" height="12" rx="2"/>
-      </svg>
-    </button>
+    <div class="chat-input__row">
+      <!-- 消息输入框：支持自动高度调整和 Enter 快捷发送 -->
+      <textarea
+        ref="textareaRef"
+        v-model="text"
+        class="chat-input__textarea"
+        placeholder="输入您的问题..."
+        rows="1"
+        :disabled="disabled || remainingQuestions === 0"
+        @keydown.enter.exact.prevent="handleSend"
+        @input="autoResize"
+      ></textarea>
+      <!-- 清空按钮：输入框有内容时显示 -->
+      <button
+        v-if="text.trim()"
+        class="chat-input__clear"
+        title="清空输入"
+        @click="handleClear"
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18"/>
+          <line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+      <!-- 发送按钮：非流式状态下显示 -->
+      <button
+        v-if="!isStreaming"
+        class="chat-input__send"
+        :disabled="disabled || !text.trim() || remainingQuestions === 0"
+        @click="handleSend"
+      >
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
+        </svg>
+      </button>
+      <!-- 停止按钮：流式响应进行中显示，用于中断生成 -->
+      <button
+        v-else
+        class="chat-input__stop"
+        @click="handleStop"
+      >
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+          <rect x="6" y="6" width="12" height="12" rx="2"/>
+        </svg>
+      </button>
+    </div>
+    <!-- 剩余提问次数提示 -->
+    <div v-if="remainingQuestions !== null" class="chat-input__hint">
+      <span v-if="remainingQuestions > 0" class="chat-input__remaining">今日剩余提问次数: {{ remainingQuestions }}</span>
+      <span v-else class="chat-input__remaining chat-input__remaining--exhausted">今日提问次数已用完</span>
+    </div>
   </div>
 </template>
 
@@ -59,6 +66,7 @@ import { ref, nextTick } from 'vue'
 const props = defineProps({
   disabled: { type: Boolean, default: false },    // 是否禁用输入
   isStreaming: { type: Boolean, default: false },  // 是否正在流式响应中
+  remainingQuestions: { type: Number, default: null },  // 今日剩余提问次数
 })
 
 // 组件事件
@@ -68,9 +76,9 @@ const emit = defineEmits(['send', 'stop'])
 const text = ref('')
 const textareaRef = ref(null)
 
-/** 发送消息：校验内容非空后触发 send 事件，并清空输入框 */
+/** 发送消息：校验内容非空且剩余次数充足后触发 send 事件，并清空输入框 */
 function handleSend() {
-  if (!text.value.trim() || props.disabled) return
+  if (!text.value.trim() || props.disabled || props.remainingQuestions === 0) return
   emit('send', text.value.trim())
   text.value = ''
   // 清空后重新计算高度
@@ -126,11 +134,16 @@ defineExpose({ setText, focus })
 .chat-input {
     min-height: 75px;
   display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 16px 24px;
+  flex-direction: column;
+  gap: 0;
+  padding: 16px 24px 8px;
   border-top: 1px solid #e5e7eb;
   background: #fff;
+}
+.chat-input__row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 .chat-input__textarea {
   flex: 1;
@@ -211,5 +224,18 @@ defineExpose({ setText, focus })
 }
 .chat-input__stop:hover {
   background: #dc2626;
+}
+.chat-input__hint {
+  text-align: right;
+  padding-top: 4px;
+  padding-right: 4px;
+}
+.chat-input__remaining {
+  font-size: 12px;
+  color: #9ca3af;
+}
+.chat-input__remaining--exhausted {
+  color: #ef4444;
+  font-weight: 500;
 }
 </style>

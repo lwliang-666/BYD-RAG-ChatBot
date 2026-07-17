@@ -118,7 +118,7 @@
             </div>
           </div>
         </div>
-        <ChatInput ref="chatInputRef" :disabled="chatStore.isSending" :is-streaming="chatStore.isSending" @send="handleSend" @stop="handleStop" />
+        <ChatInput ref="chatInputRef" :disabled="chatStore.isSending" :is-streaming="chatStore.isSending" :remaining-questions="chatStore.remainingQuestions" @send="handleSend" @stop="handleStop" />
       </template>
       <!-- 未选中对话时显示空状态提示 -->
       <template v-else>
@@ -261,6 +261,14 @@ async function handleSend(content) {
   try {
     // 发起 SSE 流式请求
     const response = await sendMessage(chatStore.currentConversation, content, controller.signal)
+
+    // 处理 429 提问次数超限
+    if (response.status === 429) {
+      const errorData = await response.json()
+      chatStore.remainingQuestions = 0
+      chatStore.addMessage('assistant', '今日提问次数已用完，请明天再来。')
+      return
+    }
     const reader = response.body.getReader()
     const decoder = new TextDecoder()
     let fullContent = ''
@@ -291,7 +299,10 @@ async function handleSend(content) {
               // sources 事件：保存 RAG 检索的引用来源
               lastSources = data.chunks
             } else if (currentEvent === 'done') {
-              // done 事件：流式响应完成
+              // done 事件：流式响应完成，提取剩余提问次数
+              if (data.remaining) {
+                chatStore.remainingQuestions = data.remaining.user_remaining
+              }
             }
           } catch {}
         }

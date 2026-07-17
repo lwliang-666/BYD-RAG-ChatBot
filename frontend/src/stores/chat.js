@@ -24,6 +24,8 @@ export const useChatStore = defineStore('chat', () => {
   const streamingContent = ref('')
   // AbortController 引用，用于中断流式请求
   const abortController = ref(null)
+  // 今日剩余提问次数
+  const remainingQuestions = ref(null)
 
   /** 获取对话列表 */
   async function fetchConversations() {
@@ -91,7 +93,7 @@ export const useChatStore = defineStore('chat', () => {
 
   return {
     conversations, currentConversation, messages,
-    isLoading, isSending, streamingContent, abortController,
+    isLoading, isSending, streamingContent, abortController, remainingQuestions,
     fetchConversations, newConversation, selectConversation,
     renameConversation, togglePin, removeConversation, addMessage,
   }

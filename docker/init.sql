@@ -57,3 +57,15 @@ CREATE INDEX IF NOT EXISTS idx_document_chunks_doc_name ON document_chunks(docum
 CREATE INDEX IF NOT EXISTS idx_document_chunks_embedding ON document_chunks
     USING hnsw (embedding vector_cosine_ops)
     WITH (m = 16, ef_construction = 64);
+
+-- 创建提问次数限制表
+CREATE TABLE IF NOT EXISTS question_rate_limits (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL,
+    date DATE NOT NULL,
+    count INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- 创建提问次数限制联合唯一索引（每个用户每天只有一条记录）
+CREATE UNIQUE INDEX IF NOT EXISTS ix_rate_limit_user_date ON question_rate_limits(user_id, date);

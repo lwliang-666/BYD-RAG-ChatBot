@@ -35,6 +35,7 @@ async def stream_chat(
     user_message: str,
     request: Request = None,
     stream_state: StreamState = None,
+    remaining_info: dict = None,
 ) -> AsyncGenerator[str, None]:
     """流式聊天主流程
 
@@ -44,7 +45,7 @@ async def stream_chat(
     3. 根据首条消息自动设置对话标题
     4. 调用 RAG 流式生成回答，同时跟踪流状态
     5. 检测客户端断开时标记停止状态
-    6. 正常完成时发送 done 事件
+    6. 正常完成时发送 done 事件（含剩余提问次数）
     """
     # 保存用户消息
     await save_message(db, conversation_id, "user", user_message)
@@ -104,4 +105,7 @@ async def stream_chat(
 
     # 正常完成时的 done 事件（被中断时不会执行到这里，由外部 finally 处理保存）
     print(f"[DEBUG] stream_chat 结束: chunk_count={chunk_count}, full_answer长度={len(stream_state.full_answer) if stream_state else 'N/A'}, stopped={stream_state.stopped if stream_state else 'N/A'}", file=sys.stderr, flush=True)
-    yield f"event: done\ndata: {{}}\n\n"
+    done_data = {}
+    if remaining_info:
+        done_data["remaining"] = remaining_info
+    yield f"event: done\ndata: {json.dumps(done_data)}\n\n"

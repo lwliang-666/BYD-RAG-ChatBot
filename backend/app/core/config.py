@@ -45,6 +45,10 @@ class Settings(BaseSettings):
     UPLOAD_DIR: str = "./uploads"
     MAX_AVATAR_SIZE_MB: int = 2
 
+    # 提问次数限制配置
+    USER_DAILY_QUESTION_LIMIT: int = 20   # 每个用户每天最多提问次数
+    GLOBAL_DAILY_QUESTION_LIMIT: int = 300  # 全局每天最多提问次数
+
     model_config = {
         "env_file": ".env",
         "env_file_encoding": "utf-8",

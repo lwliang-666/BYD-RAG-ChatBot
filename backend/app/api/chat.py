@@ -26,6 +26,7 @@ from app.services.chat_service import (
     update_conversation, delete_conversation, save_message,
 )
 from app.services.rag_service import stream_chat, StreamState
+from app.services.rate_limit_service import check_rate_limit, increment_user_count
 from starlette.background import BackgroundTask
 
 logger = logging.getLogger(__name__)
@@ -109,8 +110,26 @@ async def send_message(
 
     使用独立的数据库会话，避免 get_db 在 StreamingResponse 消费前关闭。
     通过 StreamState 跟踪流内容，BackgroundTask 保证客户端中断时也能保存助手回答。
+    包含提问次数限制检查，超限时返回 429 状态码。
     """
-    # 先用 get_db 验证对话是否存在
+    # 检查提问次数限制
+    async with AsyncSessionLocal() as check_db:
+        rate_info = await check_rate_limit(check_db, current_user.id)
+        if not rate_info["allowed"]:
+            remaining = min(rate_info["user_remaining"], rate_info["global_remaining"])
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail={
+                    "message": "今日提问次数已用完",
+                    "user_remaining": rate_info["user_remaining"],
+                    "global_remaining": rate_info["global_remaining"],
+                },
+            )
+        # 递增提问计数
+        await increment_user_count(check_db, current_user.id)
+        await check_db.commit()
+
+    # 验证对话是否存在
     async with AsyncSessionLocal() as check_db:
         conversation = await get_conversation_detail(check_db, conversation_id, current_user.id)
         if not conversation:
@@ -119,6 +138,12 @@ async def send_message(
     # 流式响应使用独立 session
     state = StreamState()
     db = AsyncSessionLocal()
+
+    # 保存剩余次数，用于在 done 事件中返回
+    remaining_info = {
+        "user_remaining": rate_info["user_remaining"] - 1,
+        "global_remaining": rate_info["global_remaining"] - 1,
+    }
 
     async def save_assistant_message():
         """后台任务：保存已生成的助手回答（正常完成或客户端中断都会执行）"""
@@ -149,7 +174,7 @@ async def send_message(
         import sys
         chunk_idx = 0
         try:
-            async for chunk in stream_chat(db, conversation_id, data.content, request=request, stream_state=state):
+            async for chunk in stream_chat(db, conversation_id, data.content, request=request, stream_state=state, remaining_info=remaining_info):
                 chunk_idx += 1
                 if chunk_idx <= 3:
                     print(f"[DEBUG stream_with_db] yield chunk #{chunk_idx}, full_answer长度={len(state.full_answer)}", file=sys.stderr, flush=True)

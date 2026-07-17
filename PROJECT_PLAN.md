@@ -72,6 +72,7 @@ BYD-RAG-ChatBot/
 |   |   |   +-- user.py
 |   |   |   +-- chat.py
 |   |   |   +-- document.py
+|   |   |   +-- rate_limit.py
 |   |   +-- schemas/
 |   |   |   +-- auth.py
 |   |   |   +-- chat.py
@@ -81,6 +82,7 @@ BYD-RAG-ChatBot/
 |   |   |   +-- chat_service.py
 |   |   |   +-- user_service.py
 |   |   |   +-- rag_service.py
+|   |   |   +-- rate_limit_service.py
 |   |   +-- rag/
 |   |   |   +-- embedding.py
 |   |   |   +-- chunking.py
@@ -151,12 +153,23 @@ BYD-RAG-ChatBot/
 | metadata | JSONB | | 元数据(页码/章节等) |
 | created_at | TIMESTAMP | DEFAULT NOW() | 创建时间 |
 
-### 3.5 索引设计
+### 3.5 提问次数限制表 (question_rate_limits)
+
+| 字段 | 类型 | 约束 | 说明 |
+|------|------|------|------|
+| id | UUID | PK | 主键 |
+| user_id | UUID | NOT NULL | 用户 ID |
+| date | DATE | NOT NULL | 日期 |
+| count | INTEGER | DEFAULT 0 | 当日提问次数 |
+| created_at | TIMESTAMP | DEFAULT NOW() | 创建时间 |
+
+### 3.6 索引设计
 
 - users: username 部分唯一索引(WHERE is_deleted = FALSE, 允许软删除用户名重新注册)
 - conversations: user_id + is_deleted 复合索引, is_pinned 索引
 - messages: conversation_id 索引
 - document_chunks: embedding 向量索引(IVFFlat 或 HNSW)
+- question_rate_limits: user_id + date 联合唯一索引(每个用户每天只有一条记录)
 
 ---
 
@@ -202,8 +215,15 @@ event: sources
 data: {"chunks": [{"content": "...", "metadata": {"page": 5}}]}
 
 event: done
-data: {"message_id": "uuid"}
+data: {"remaining": {"user_remaining": 15, "global_remaining": 280}}
 ```
+
+### 4.5 提问次数限制
+
+- 每个用户每天最多提问 20 次
+- 全局每天最多提问 300 次
+- 超限时返回 HTTP 429 状态码，detail 包含 `user_remaining` 和 `global_remaining`
+- SSE done 事件中返回本次提问后的剩余次数
 
 ---
 
@@ -592,6 +612,10 @@ CHUNK_OVERLAP_TOKENS=50
 # 文件上传
 UPLOAD_DIR=./uploads
 MAX_AVATAR_SIZE_MB=2
+
+# 提问次数限制
+USER_DAILY_QUESTION_LIMIT=20
+GLOBAL_DAILY_QUESTION_LIMIT=300
 ```
 
 ---
