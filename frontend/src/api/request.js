@@ -38,7 +38,8 @@ api.interceptors.response.use(
       if (refreshToken) {
         try {
           // 使用 refresh_token 获取新的 access_token
-          const res = await axios.post('/api/auth/refresh', { refresh_token: refreshToken })
+          const baseURL = import.meta.env.VITE_API_BASE_URL || ''
+          const res = await axios.post(`${baseURL}/api/auth/refresh`, { refresh_token: refreshToken })
           // 更新本地存储的令牌
           localStorage.setItem('access_token', res.data.access_token)
           localStorage.setItem('refresh_token', res.data.refresh_token)
