@@ -15,7 +15,7 @@ api.lwliang.com:8443 → 云服务器 (Nginx 反向代理)
 127.0.0.1:8000 → FastAPI + Uvicorn
     |
     v
-127.0.0.1:5432 → PolarDB-PG + pgvector (Docker)
+127.0.0.1:5432 → PostgreSQL 16 + pgvector (apt 安装)
 ```
 
 部署策略：前端部署到 Vercel（免费静态托管 + 自动 HTTPS + CDN），后端和数据库部署到云服务器。
@@ -119,58 +119,36 @@ systemctl enable nginx
 
 ## 三、数据库部署
 
-### 3.1 上传 Docker 配置
+> 实际部署使用原生 PostgreSQL 16 + pgvector（apt 安装），替代 Docker 版 PolarDB-PG。
+> 原因：国内服务器拉取 Docker Hub 镜像困难，原生安装更稳定。
 
-在本地执行：
-
-```bash
-# 将 docker 目录上传到服务器
-scp -r docker/ root@49.233.127.241:/opt/byd-rag/
-```
-
-### 3.2 修改 docker-compose.yml
-
-服务器上的 `/opt/byd-rag/docker/docker-compose.yml` 需要修改：
-
-```yaml
-services:
-  polardb:
-    image: polardb/polardb_pg_local_instance:latest
-    container_name: byd_rag_polardb
-    restart: unless-stopped
-    ports:
-      # 仅监听本地，不对外暴露
-      - "127.0.0.1:5432:5432"
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: <生产环境强密码>
-    volumes:
-      - polardb_data:/var/libnssdb
-      - ./01-create-db.sh:/docker-entrypoint-initdb.d/01-create-db.sh
-      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d byd_rag"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
-
-volumes:
-  polardb_data:
-```
-
-关键改动：
-- 端口绑定改为 `127.0.0.1:5432`，数据库不对外暴露
-- 密码改为强密码
-
-### 3.3 启动数据库
+### 3.1 安装 PostgreSQL + pgvector
 
 ```bash
-cd /opt/byd-rag/docker
-docker compose up -d
+apt install -y postgresql postgresql-16-pgvector
+```
 
-# 等待健康检查通过
-docker compose ps
+### 3.2 配置数据库
+
+```bash
+# 设置 postgres 密码
+sudo -u postgres psql -c "ALTER USER postgres WITH PASSWORD 'BydRag2024Prod!';"
+
+# 创建 byd_rag 数据库
+sudo -u postgres psql -c "CREATE DATABASE byd_rag WITH ENCODING 'UTF8' LC_COLLATE 'C' LC_CTYPE 'C' TEMPLATE template0;"
+
+# 执行建表脚本
+cat docker/init.sql | sudo -u postgres psql -d byd_rag
+```
+
+### 3.3 配置仅监听本地
+
+```bash
+# 修改 postgresql.conf
+sed -i "s/#listen_addresses = 'localhost'/listen_addresses = 'localhost'/" /etc/postgresql/16/main/postgresql.conf
+
+# 重启生效
+systemctl restart postgresql
 ```
 
 ---
@@ -211,8 +189,8 @@ vim /opt/byd-rag/backend/.env
 写入以下内容（根据实际情况修改）：
 
 ```env
-# 数据库 - 指向本地 Docker 容器
-DATABASE_URL=postgresql+asyncpg://postgres:<强密码>@localhost:5432/byd_rag
+# 数据库 - 指向本地原生 PostgreSQL
+DATABASE_URL=postgresql+asyncpg://postgres:BydRag2024Prod!@localhost:5432/byd_rag
 
 # JWT - 必须更换为随机强密钥
 JWT_SECRET_KEY=<随机生成的64位密钥>
@@ -265,7 +243,8 @@ cd /opt/byd-rag/backend
 source venv/bin/activate
 
 # 确保 originData 目录中有 PDF 文件
-python -m scripts.ingest
+# 使用 HuggingFace 镜像下载 embedding 模型
+HF_ENDPOINT=https://hf-mirror.com python -m scripts.ingest
 ```
 
 ### 4.6 配置 Systemd 服务
@@ -281,15 +260,15 @@ vim /etc/systemd/system/byd-rag-backend.service
 ```ini
 [Unit]
 Description=BYD RAG ChatBot Backend
-After=network.target docker.service
-Requires=docker.service
+After=network.target postgresql.service
+Requires=postgresql.service
 
 [Service]
 Type=simple
 User=root
 WorkingDirectory=/opt/byd-rag/backend
 Environment=XFXC_API_KEY=<你的讯飞星火API密钥>
-ExecStart=/opt/byd-rag/backend/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 2
+ExecStart=/opt/byd-rag/backend/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 1
 Restart=always
 RestartSec=5
 
@@ -609,7 +588,7 @@ tail -f /var/log/nginx/access.log
 tail -f /var/log/nginx/error.log
 
 # 数据库日志
-cd /opt/byd-rag/docker && docker compose logs -f polardb
+journalctl -u postgresql -f
 ```
 
 ### 10.3 数据库备份
@@ -619,10 +598,10 @@ cd /opt/byd-rag/docker && docker compose logs -f polardb
 mkdir -p /opt/byd-rag/backup
 
 # 手动备份
-docker exec byd_rag_polardb pg_dump -U postgres byd_rag > /opt/byd-rag/backup/$(date +%Y%m%d).sql
+sudo -u postgres pg_dump byd_rag > /opt/byd-rag/backup/$(date +%Y%m%d).sql
 
 # 设置定时备份（每天凌晨 3 点）
-echo '0 3 * * * docker exec byd_rag_polardb pg_dump -U postgres byd_rag > /opt/byd-rag/backup/$(date +\%Y\%m\%d).sql' | crontab -
+echo '0 3 * * * sudo -u postgres pg_dump byd_rag > /opt/byd-rag/backup/$(date +\%Y\%m\%d).sql' | crontab -
 ```
 
 ### 10.4 重新入库 PDF
