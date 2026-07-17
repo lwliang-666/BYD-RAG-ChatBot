@@ -6,13 +6,16 @@
 用户浏览器
     |
     v
-Vercel (前端静态托管)
+lwliang.com → Vercel (前端静态托管, 自动 HTTPS + CDN)
     |  /api/*  /uploads/*
     v
-云服务器 (后端 API)
-    |  FastAPI + Uvicorn
+api.lwliang.com → 云服务器 (Nginx 反向代理)
+    |
     v
-云服务器 (PolarDB-PG + pgvector)
+127.0.0.1:8000 → FastAPI + Uvicorn
+    |
+    v
+127.0.0.1:5432 → PolarDB-PG + pgvector (Docker)
 ```
 
 部署策略：前端部署到 Vercel（免费静态托管 + 自动 HTTPS + CDN），后端和数据库部署到云服务器。
@@ -21,27 +24,28 @@ Vercel (前端静态托管)
 
 ## 一、准备工作
 
-### 1.1 云服务器
+### 1.1 购买云服务器
 
-推荐配置：
+推荐购买轻量应用服务器，性价比最高：
 
-| 项目 | 最低配置 | 推荐配置 |
-|------|----------|----------|
-| CPU | 2 核 | 4 核 |
-| 内存 | 4 GB | 8 GB |
-| 硬盘 | 40 GB SSD | 80 GB SSD |
-| 系统 | Ubuntu 22.04 | Ubuntu 22.04 |
+| 平台 | 规格 | 参考价格 | 链接 |
+|------|------|----------|------|
+| 阿里云 | 2核4G 轻量应用服务器 | 约 50-100 元/月 | https://www.aliyun.com/product/swas |
+| 腾讯云 | 2核4G 轻量应用服务器 | 约 50-112 元/月 | https://cloud.tencent.com/product/lighthouse |
+| 华为云 | 2核4G HECS 云耀服务器 | 约 59-99 元/月 | https://www.huaweicloud.com/product/hecs.html |
 
-> Embedding 模型 (bge-large-zh-v1.5) 加载需要约 1.3 GB 内存，加上数据库和 FastAPI，4 GB 内存是底线。
+> Embedding 模型 (bge-large-zh-v1.5) 加载需要约 1.3 GB 内存，加上数据库和 FastAPI，4 GB 内存是底线。2核4G 刚好够用，预算充足建议 4核8G。
+
+系统选择 **Ubuntu 22.04 LTS**。
 
 ### 1.2 域名规划
 
-假设你在 Vercel 购买的域名为 `example.com`，规划如下：
+域名 `lwliang.com` 已在 Vercel 购买，规划如下：
 
 | 用途 | 域名 | 指向 |
 |------|------|------|
-| 前端页面 | `example.com` | Vercel |
-| 后端 API | `api.example.com` | 云服务器 |
+| 前端页面 | `lwliang.com` | Vercel |
+| 后端 API | `api.lwliang.com` | 云服务器 |
 
 ### 1.3 本地确认项目可运行
 
@@ -173,8 +177,17 @@ docker compose ps
 
 ### 4.1 上传代码
 
+方式一：通过 Git 拉取（推荐，后续更新方便）
+
 ```bash
-# 在本地，将后端代码上传到服务器
+cd /opt/byd-rag
+git clone <你的GitHub仓库地址> .
+```
+
+方式二：通过 scp 上传
+
+```bash
+# 在本地执行
 scp -r backend/ root@<服务器IP>:/opt/byd-rag/
 ```
 
@@ -313,7 +326,7 @@ vim /etc/nginx/sites-available/byd-rag
 ```nginx
 server {
     listen 80;
-    server_name api.example.com;
+    server_name api.lwliang.com;
 
     # 请求体大小限制（头像上传）
     client_max_body_size 5M;
@@ -365,31 +378,29 @@ systemctl reload nginx
 
 ## 六、域名 DNS 配置
 
-### 6.1 在 Vercel 配置域名
+域名 `lwliang.com` 在 Vercel 购买，DNS 管理也在 Vercel。
+
+### 6.1 在 Vercel 添加 DNS 记录
 
 1. 登录 [Vercel Dashboard](https://vercel.com/dashboard)
-2. 进入你的项目 Settings > Domains
-3. 添加 `example.com` 和 `www.example.com`
-4. Vercel 会给出 DNS 记录配置指引
-
-### 6.2 配置 DNS 记录
-
-在 Vercel 域名管理面板或你的 DNS 服务商处添加：
+2. 进入域名管理：Settings > Domains
+3. 点击 `lwliang.com` 旁边的 DNS 配置
+4. 添加以下记录：
 
 | 类型 | 名称 | 值 | 说明 |
 |------|------|-----|------|
-| A | `@` | `76.76.21.21` | Vercel 的 Anycast IP |
-| CNAME | `www` | `cname.vercel-dns.com` | www 子域名 |
-| A | `api` | `<云服务器IP>` | 后端 API 服务器 |
+| A | `@` | `76.76.21.21` | Vercel 的 Anycast IP（前端） |
+| CNAME | `www` | `cname.vercel-dns.com` | www 子域名（前端） |
+| A | `api` | `<云服务器公网IP>` | 后端 API 服务器 |
 
-> 如果域名是在 Vercel 购买的，DNS 管理也在 Vercel，直接在 Vercel Dashboard 的 DNS 设置中添加记录即可。
+> 添加 `api` 的 A 记录后，`api.lwliang.com` 就会指向你的云服务器。
 
-### 6.3 等待 DNS 生效
+### 6.2 等待 DNS 生效
 
 ```bash
-# 检查 DNS 解析
-dig api.example.com
-dig example.com
+# 在本地检查 DNS 解析
+dig api.lwliang.com
+dig lwliang.com
 
 # 通常几分钟到几小时生效
 ```
@@ -398,25 +409,25 @@ dig example.com
 
 ## 七、HTTPS 证书配置
 
-### 7.1 安装 Certbot
+### 7.1 前端 HTTPS
+
+Vercel 自动为 `lwliang.com` 提供 HTTPS 证书，无需手动配置。
+
+### 7.2 后端 HTTPS（api.lwliang.com）
+
+在云服务器上安装 Certbot 并申请证书：
 
 ```bash
+# 安装 Certbot
 apt install -y certbot python3-certbot-nginx
-```
 
-### 7.2 为 API 域名申请证书
-
-```bash
-certbot --nginx -d api.example.com
+# 为 api.lwliang.com 申请证书
+certbot --nginx -d api.lwliang.com
 ```
 
 按提示操作，Certbot 会自动修改 Nginx 配置并启用 HTTPS。
 
-### 7.3 前端 HTTPS
-
-Vercel 自动为部署的站点提供 HTTPS 证书，无需手动配置。
-
-### 7.4 设置自动续期
+### 7.3 设置自动续期
 
 ```bash
 # Certbot 自动续期已内置 timer，验证一下
@@ -432,7 +443,7 @@ certbot renew --dry-run
 
 ### 8.1 修改前端 API 地址
 
-前端 `request.js` 中 `baseURL` 为空，意味着使用相对路径。部署后前端在 `example.com`，API 在 `api.example.com`，需要修改。
+前端 `request.js` 中 `baseURL` 为空，意味着使用相对路径。部署后前端在 `lwliang.com`，API 在 `api.lwliang.com`，需要修改。
 
 修改 `frontend/src/api/request.js`：
 
@@ -453,8 +464,8 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:5173",
         "http://127.0.0.1:5173",
-        "https://example.com",
-        "https://www.example.com",
+        "https://lwliang.com",
+        "https://www.lwliang.com",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -481,7 +492,7 @@ app.add_middleware(
 创建 `frontend/.env.production`：
 
 ```
-VITE_API_BASE_URL=https://api.example.com
+VITE_API_BASE_URL=https://api.lwliang.com
 ```
 
 ### 8.5 推送代码到 GitHub
@@ -505,13 +516,13 @@ git push origin main
    - Build Command: `pnpm build`
    - Output Directory: `dist`
 6. 在 Environment Variables 中添加：
-   - `VITE_API_BASE_URL` = `https://api.example.com`
+   - `VITE_API_BASE_URL` = `https://api.lwliang.com`
 7. 点击 "Deploy"
 
 ### 8.7 绑定域名
 
 1. 在 Vercel 项目 Settings > Domains
-2. 添加 `example.com`
+2. 添加 `lwliang.com`
 3. 按提示配置 DNS（第六步已完成）
 
 ---
@@ -526,16 +537,16 @@ curl http://127.0.0.1:8000/health
 # 应返回 {"status":"ok"}
 
 # 从外部检查
-curl https://api.example.com/health
+curl https://api.lwliang.com/health
 ```
 
 ### 9.2 检查前端
 
-浏览器访问 `https://example.com`，应看到登录页面。
+浏览器访问 `https://lwliang.com`，应看到登录页面。
 
 ### 9.3 端到端测试
 
-1. 访问 `https://example.com/register` 注册账号
+1. 访问 `https://lwliang.com/register` 注册账号
 2. 登录
 3. 新建对话，发送问题测试 RAG 问答
 4. 测试头像上传
@@ -549,8 +560,9 @@ curl https://api.example.com/health
 
 ```bash
 # 后端更新
-cd /opt/byd-rag/backend
+cd /opt/byd-rag
 git pull origin main
+cd backend
 source venv/bin/activate
 pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 systemctl restart byd-rag-backend
@@ -576,6 +588,9 @@ cd /opt/byd-rag/docker && docker compose logs -f polardb
 ### 10.3 数据库备份
 
 ```bash
+# 创建备份目录
+mkdir -p /opt/byd-rag/backup
+
 # 手动备份
 docker exec byd_rag_polardb pg_dump -U postgres byd_rag > /opt/byd-rag/backup/$(date +%Y%m%d).sql
 
@@ -633,18 +648,18 @@ systemctl restart sshd
 
 ## 十二、部署检查清单
 
-- [ ] 云服务器已购买并可 SSH 登录
+- [ ] 云服务器已购买（2核4G+，Ubuntu 22.04）并可 SSH 登录
 - [ ] Docker 已安装，数据库容器正常运行
 - [ ] 后端代码已上传，虚拟环境已创建
 - [ ] `.env` 配置正确（数据库密码、JWT 密钥、API Key）
 - [ ] PDF 文档已入库
 - [ ] Systemd 服务已配置并正常运行
-- [ ] Nginx 反向代理已配置
-- [ ] DNS 记录已添加（@、www、api）
-- [ ] HTTPS 证书已申请并自动续期
-- [ ] 前端已部署到 Vercel
-- [ ] CORS 配置已更新允许线上域名
-- [ ] 前端环境变量 `VITE_API_BASE_URL` 已设置
+- [ ] Nginx 反向代理已配置（api.lwliang.com）
+- [ ] Vercel DNS 记录已添加（@、www、api）
+- [ ] HTTPS 证书已申请（api.lwliang.com）并自动续期
+- [ ] 前端已部署到 Vercel（lwliang.com）
+- [ ] CORS 配置已更新允许 lwliang.com
+- [ ] 前端环境变量 `VITE_API_BASE_URL=https://api.lwliang.com` 已设置
 - [ ] 防火墙已配置
 - [ ] SSH 已加固
 - [ ] 数据库定时备份已设置
