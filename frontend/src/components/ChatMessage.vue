@@ -1,7 +1,7 @@
 <!--
   ChatMessage.vue - 聊天消息气泡组件
   根据消息角色（user/assistant）渲染不同样式的消息气泡
-  支持 Markdown 渲染、代码高亮、引用来源展示、复制和填入操作
+  支持 Markdown 渲染、代码高亮、引用来源展示、复制、填入和语音播放操作
 -->
 <template>
   <!-- 根据消息角色应用不同样式：用户消息靠右，AI 消息靠左 -->
@@ -56,6 +56,26 @@
           <span class="chat-message__action-label">填入</span>
         </button>
       </div>
+      <!-- AI 消息的操作按钮：语音播放 -->
+      <div v-if="message.role === 'assistant'" class="chat-message__actions chat-message__actions--assistant">
+        <button
+          :class="['chat-message__action-btn', { 'chat-message__action-btn--playing': isPlaying }]"
+          :title="isPlaying ? '停止播放' : '语音播放'"
+          @click="toggleSpeech"
+        >
+          <!-- 播放图标 -->
+          <svg v-if="!isPlaying" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+            <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+            <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+          </svg>
+          <!-- 停止图标 -->
+          <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+            <rect x="6" y="6" width="12" height="12" rx="2"/>
+          </svg>
+          <span class="chat-message__action-label">{{ isPlaying ? '停止' : '播放' }}</span>
+        </button>
+      </div>
       <!-- 引用来源区域：展示 RAG 检索到的文档片段 -->
       <div v-if="message.sources && message.sources.chunks?.length" class="chat-message__sources">
         <button class="chat-message__sources-toggle" @click="showSources = !showSources">
@@ -80,7 +100,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onUnmounted } from 'vue'
 import MarkdownIt from 'markdown-it'
 import hljs from 'highlight.js'
 import 'highlight.js/styles/github.css'
@@ -99,6 +119,72 @@ const showSources = ref(false)
 // 复制按钮状态
 const copied = ref(false)
 let copyTimer = null
+
+// 语音播放状态
+const isPlaying = ref(false)
+
+/**
+ * 去除 Markdown 标记，提取纯文本供语音朗读
+ * 去除代码块、行内代码、链接、图片、加粗/斜体等标记
+ */
+function stripMarkdown(mdText) {
+  return mdText
+    .replace(/```[\s\S]*?```/g, '')            // 去除代码块
+    .replace(/`([^`]+)`/g, '$1')               // 去除行内代码
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')   // 链接只保留文字
+    .replace(/!\[([^\]]*)\]\([^)]+\)/g, '')    // 去除图片
+    .replace(/(\*\*|__)(.*?)\1/g, '$2')        // 去除加粗
+    .replace(/(\*|_)(.*?)\1/g, '$2')           // 去除斜体
+    .replace(/^#{1,6}\s+/gm, '')               // 去除标题标记
+    .replace(/^[-*+]\s+/gm, '')                // 去除无序列表标记
+    .replace(/^\d+\.\s+/gm, '')                // 去除有序列表标记
+    .replace(/^>\s+/gm, '')                    // 去除引用标记
+    .replace(/\n{2,}/g, '\n')                  // 多个换行合并
+    .trim()
+}
+
+/** 切换语音播放状态 */
+function toggleSpeech() {
+  if (isPlaying.value) {
+    window.speechSynthesis.cancel()
+    isPlaying.value = false
+    return
+  }
+
+  const plainText = stripMarkdown(props.message.content || '')
+  if (!plainText) return
+
+  const utterance = new SpeechSynthesisUtterance(plainText)
+  utterance.lang = 'zh-CN'
+  utterance.rate = 1.0
+  utterance.pitch = 1.0
+
+  // 优先选择中文语音
+  const voices = window.speechSynthesis.getVoices()
+  const zhVoice = voices.find(v => v.lang.startsWith('zh'))
+  if (zhVoice) {
+    utterance.voice = zhVoice
+  }
+
+  utterance.onend = () => {
+    isPlaying.value = false
+  }
+  utterance.onerror = () => {
+    isPlaying.value = false
+  }
+
+  // 停止其他正在播放的语音
+  window.speechSynthesis.cancel()
+  isPlaying.value = true
+  window.speechSynthesis.speak(utterance)
+}
+
+// 组件卸载时停止播放
+onUnmounted(() => {
+  if (isPlaying.value) {
+    window.speechSynthesis.cancel()
+  }
+})
 
 /**
  * 复制消息内容到剪贴板
@@ -234,6 +320,11 @@ const renderedContent = computed(() => md.render(props.message.content || ''))
 .chat-message--user:hover .chat-message__actions {
   opacity: 1;
 }
+/* AI 消息操作按钮始终可见 */
+.chat-message__actions--assistant {
+  justify-content: flex-start;
+  opacity: 1;
+}
 .chat-message__action-btn {
   display: inline-flex;
   align-items: center;
@@ -252,6 +343,17 @@ const renderedContent = computed(() => md.render(props.message.content || ''))
   color: #4f46e5;
   border-color: #c7d2fe;
   background: #eef2ff;
+}
+/* 播放中按钮高亮样式 */
+.chat-message__action-btn--playing {
+  color: #6d28d9;
+  border-color: #8b5cf6;
+  background: #ede9fe;
+}
+.chat-message__action-btn--playing:hover {
+  color: #4c1d95;
+  border-color: #7c3aed;
+  background: #ddd6fe;
 }
 .chat-message__action-label {
   font-size: 12px;

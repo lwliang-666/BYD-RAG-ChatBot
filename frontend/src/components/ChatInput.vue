@@ -1,7 +1,7 @@
 <!--
   ChatInput.vue - 聊天输入框组件
-  提供消息输入、发送、停止流式响应、一键清空等功能
-  支持自动高度调整、Enter 快捷发送、流式状态切换等交互
+  提供消息输入、发送、停止流式响应、一键清空、语音输入等功能
+  支持自动高度调整、Enter 快捷发送、流式状态切换、语音识别等交互
 -->
 <template>
   <div class="chat-input">
@@ -27,6 +27,21 @@
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <line x1="18" y1="6" x2="6" y2="18"/>
           <line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+      <!-- 语音输入按钮：使用浏览器原生 SpeechRecognition -->
+      <button
+        v-if="isSpeechSupported"
+        :class="['chat-input__mic', { 'chat-input__mic--active': isListening }]"
+        :title="isListening ? '停止录音' : '语音输入'"
+        :disabled="disabled || remainingQuestions === 0"
+        @click="toggleListening"
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+          <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+          <line x1="12" y1="19" x2="12" y2="23"/>
+          <line x1="8" y1="23" x2="16" y2="23"/>
         </svg>
       </button>
       <!-- 发送按钮：非流式状态下显示 -->
@@ -60,7 +75,7 @@
 </template>
 
 <script setup>
-import { ref, nextTick } from 'vue'
+import { ref, computed, onUnmounted } from 'vue'
 
 // 组件属性
 const props = defineProps({
@@ -75,6 +90,71 @@ const emit = defineEmits(['send', 'stop'])
 // 输入框文本内容和 DOM 引用
 const text = ref('')
 const textareaRef = ref(null)
+
+// 语音识别相关状态
+const isListening = ref(false)
+const isSpeechSupported = computed(() => {
+  return !!(window.SpeechRecognition || window.webkitSpeechRecognition)
+})
+
+// 语音识别实例
+let recognition = null
+if (isSpeechSupported.value) {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+  recognition = new SpeechRecognition()
+  recognition.lang = 'zh-CN'
+  recognition.interimResults = true
+  recognition.continuous = false
+
+  recognition.onresult = (event) => {
+    let interimTranscript = ''
+    let finalTranscript = ''
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      const transcript = event.results[i][0].transcript
+      if (event.results[i].isFinal) {
+        finalTranscript += transcript
+      } else {
+        interimTranscript += transcript
+      }
+    }
+    // 最终结果填入输入框
+    if (finalTranscript) {
+      text.value = finalTranscript
+      nextTick(autoResize)
+    } else if (interimTranscript) {
+      // 中间结果实时显示
+      text.value = interimTranscript
+      nextTick(autoResize)
+    }
+  }
+
+  recognition.onend = () => {
+    isListening.value = false
+  }
+
+  recognition.onerror = () => {
+    isListening.value = false
+  }
+}
+
+/** 切换语音录音状态 */
+function toggleListening() {
+  if (!recognition) return
+  if (isListening.value) {
+    recognition.stop()
+    isListening.value = false
+  } else {
+    recognition.start()
+    isListening.value = true
+  }
+}
+
+// 组件卸载时停止录音
+onUnmounted(() => {
+  if (recognition && isListening.value) {
+    recognition.stop()
+  }
+})
 
 /** 发送消息：校验内容非空且剩余次数充足后触发 send 事件，并清空输入框 */
 function handleSend() {
@@ -186,6 +266,49 @@ defineExpose({ setText, focus })
   color: #ef4444;
   border-color: #fca5a5;
   background: #fef2f2;
+}
+.chat-input__mic {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  background: #fff;
+  color: #9ca3af;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+  flex-shrink: 0;
+}
+.chat-input__mic:hover:not(:disabled) {
+  color: #4f46e5;
+  border-color: #c7d2fe;
+  background: #eef2ff;
+}
+.chat-input__mic:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+/* 录音中状态：红色脉冲动画 */
+.chat-input__mic--active {
+  color: #fff;
+  background: #ef4444;
+  border-color: #ef4444;
+  animation: mic-pulse 1.5s ease-in-out infinite;
+}
+.chat-input__mic--active:hover {
+  color: #fff;
+  background: #dc2626;
+  border-color: #dc2626;
+}
+@keyframes mic-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(239, 68, 68, 0);
+  }
 }
 .chat-input__send {
   width: 40px;

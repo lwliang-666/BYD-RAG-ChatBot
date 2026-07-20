@@ -104,6 +104,24 @@
             <div class="chat-message__bot-avatar">AI</div>
             <div class="chat-message__body">
               <div class="chat-message__content" v-html="renderStreaming"></div>
+              <!-- 流式内容播放按钮 -->
+              <div class="chat-message__actions chat-message__actions--assistant">
+                <button
+                  :class="['chat-message__action-btn', { 'chat-message__action-btn--playing': isStreamingPlaying }]"
+                  :title="isStreamingPlaying ? '停止播放' : '语音播放'"
+                  @click="toggleStreamingSpeech"
+                >
+                  <svg v-if="!isStreamingPlaying" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+                    <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+                    <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+                  </svg>
+                  <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                    <rect x="6" y="6" width="12" height="12" rx="2"/>
+                  </svg>
+                  <span class="chat-message__action-label">{{ isStreamingPlaying ? '停止' : '播放' }}</span>
+                </button>
+              </div>
             </div>
           </div>
           <!-- 等待响应时的加载动画 -->
@@ -164,7 +182,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, nextTick, onMounted } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import MarkdownIt from 'markdown-it'
 import { useAuthStore } from '../stores/auth'
@@ -200,6 +218,69 @@ let renameConfirming = false  // 防止 blur 和 enter 重复触发确认
 
 // Markdown 渲染器（用于流式内容的实时渲染）
 const md = new MarkdownIt()
+
+// 流式内容语音播放状态
+const isStreamingPlaying = ref(false)
+
+/**
+ * 去除 Markdown 标记，提取纯文本供语音朗读
+ */
+function stripMarkdown(mdText) {
+  return mdText
+    .replace(/```[\s\S]*?```/g, '')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/!\[([^\]]*)\]\([^)]+\)/g, '')
+    .replace(/(\*\*|__)(.*?)\1/g, '$2')
+    .replace(/(\*|_)(.*?)\1/g, '$2')
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/^[-*+]\s+/gm, '')
+    .replace(/^\d+\.\s+/gm, '')
+    .replace(/^>\s+/gm, '')
+    .replace(/\n{2,}/g, '\n')
+    .trim()
+}
+
+/** 切换流式内容语音播放 */
+function toggleStreamingSpeech() {
+  if (isStreamingPlaying.value) {
+    window.speechSynthesis.cancel()
+    isStreamingPlaying.value = false
+    return
+  }
+
+  const plainText = stripMarkdown(chatStore.streamingContent || '')
+  if (!plainText) return
+
+  const utterance = new SpeechSynthesisUtterance(plainText)
+  utterance.lang = 'zh-CN'
+  utterance.rate = 1.0
+  utterance.pitch = 1.0
+
+  const voices = window.speechSynthesis.getVoices()
+  const zhVoice = voices.find(v => v.lang.startsWith('zh'))
+  if (zhVoice) {
+    utterance.voice = zhVoice
+  }
+
+  utterance.onend = () => {
+    isStreamingPlaying.value = false
+  }
+  utterance.onerror = () => {
+    isStreamingPlaying.value = false
+  }
+
+  window.speechSynthesis.cancel()
+  isStreamingPlaying.value = true
+  window.speechSynthesis.speak(utterance)
+}
+
+// 组件卸载时停止播放
+onUnmounted(() => {
+  if (isStreamingPlaying.value) {
+    window.speechSynthesis.cancel()
+  }
+})
 
 /** 流式内容的 Markdown 渲染结果 */
 const renderStreaming = computed(() => md.render(chatStore.streamingContent || ''))
@@ -672,6 +753,47 @@ function handleLogout() {
   background: #f3f4f6;
   color: #1f2937;
   border-bottom-left-radius: 4px;
+}
+/* 流式消息播放按钮样式 */
+.chat-message__actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+.chat-message__actions--assistant {
+  justify-content: flex-start;
+}
+.chat-message__action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  font-size: 12px;
+  color: #6b7280;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  cursor: pointer;
+  line-height: 1;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.chat-message__action-btn:hover {
+  color: #4f46e5;
+  border-color: #c7d2fe;
+  background: #eef2ff;
+}
+.chat-message__action-btn--playing {
+  color: #6d28d9;
+  border-color: #8b5cf6;
+  background: #ede9fe;
+}
+.chat-message__action-btn--playing:hover {
+  color: #4c1d95;
+  border-color: #7c3aed;
+  background: #ddd6fe;
+}
+.chat-message__action-label {
+  font-size: 12px;
 }
 /* 加载动画：三个跳动的圆点 */
 .chat-message__loading {
