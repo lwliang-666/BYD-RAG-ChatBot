@@ -6,6 +6,16 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { getProfile, updateProfile, updateUsername, uploadAvatar } from '../api/user'
 
+// API 基础地址，用于拼接相对路径的头像 URL
+const apiBaseURL = import.meta.env.VITE_API_BASE_URL || ''
+
+/** 将相对路径的头像 URL 转为完整地址 */
+function resolveAvatarUrl(url) {
+  if (!url) return ''
+  if (url.startsWith('http')) return url
+  return `${apiBaseURL}${url}`
+}
+
 export const useUserStore = defineStore('user', () => {
   // 用户基本信息
   const id = ref(null)
@@ -21,7 +31,7 @@ export const useUserStore = defineStore('user', () => {
     username.value = data.username
     // 显示名优先使用 display_name，无则使用 username
     displayName.value = data.display_name || data.username
-    avatarUrl.value = data.avatar_url || ''
+    avatarUrl.value = resolveAvatarUrl(data.avatar_url)
   }
 
   /** 更新用户显示名 */
@@ -39,7 +49,7 @@ export const useUserStore = defineStore('user', () => {
   /** 上传新头像并更新本地头像 URL */
   async function changeAvatar(file) {
     const res = await uploadAvatar(file)
-    avatarUrl.value = res.data.avatar_url
+    avatarUrl.value = resolveAvatarUrl(res.data.avatar_url)
   }
 
   return { id, username, displayName, avatarUrl, fetchProfile, updateDisplayName, changeUsername, changeAvatar }
