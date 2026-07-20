@@ -45,3 +45,7 @@ backend/uploads/
 
 # MCP
 .playwright-mcp/
+
+# Resume
+resume.pdf
+generate_resume.py
