@@ -40,7 +40,8 @@ export function deleteConversation(id) {
 export function sendMessage(conversationId, content, signal) {
   // 从 localStorage 获取访问令牌
   const token = localStorage.getItem('access_token')
-  return fetch(`/api/chat/conversations/${conversationId}/messages`, {
+  const baseURL = import.meta.env.VITE_API_BASE_URL || ''
+  return fetch(`${baseURL}/api/chat/conversations/${conversationId}/messages`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
