@@ -331,6 +331,8 @@ flowchart LR
 - 对话列表: 支持三点按钮菜单(重命名/置顶/删除)
 - 消息展示: 用户消息靠右, AI 消息靠左, 支持 Markdown 渲染
 - AI 回答: SSE 流式逐字显示, 底部展示引用来源
+- 语音输入: 输入框旁麦克风按钮, 使用 Web Speech API SpeechRecognition 实现中文语音识别, 识别结果实时填入输入框, 录音中显示红色脉冲动画, 不支持语音识别的浏览器自动隐藏按钮
+- 语音播放: AI 消息和流式内容支持语音朗读, 使用 Web Speech API SpeechSynthesis, 自动去除 Markdown 标记后朗读纯文本, 播放中按钮高亮, 点击可停止
 - 头像上传: 点击头像弹出文件选择, 支持 jpg/png/gif/webp, 大小限制 2MB
 - 用户名修改: 双击用户名或单击编辑图标进入编辑模式, 失焦时校验唯一性
 
@@ -483,12 +485,14 @@ flowchart LR
 - ChatMessage.vue:
   - 用户消息: 靠右显示, 用户头像, 悬停显示操作按钮(一键复制/一键填入输入框)
   - AI 消息: 靠左显示, AI 图标, Markdown 渲染, 代码高亮
+  - AI 消息操作: 语音播放按钮(使用 Web Speech API SpeechSynthesis, 自动去除 Markdown 标记朗读纯文本)
   - AI 消息底部: 引用来源折叠区(点击展开查看原文档片段)
 - ChatInput.vue:
   - 多行输入框(Enter 发送, Shift+Enter 换行)
   - 发送按钮(发送中禁用)
   - 暴露 setText 方法供外部填入内容
   - 清空按钮(输入框有内容时显示, 点击清空并聚焦)
+  - 语音输入按钮(使用 Web Speech API SpeechRecognition, 中文识别, 录音中红色脉冲动画)
 - SSE 流式接收:
   - 使用 EventSource 或 fetch + ReadableStream
   - 逐字追加 AI 回答内容
