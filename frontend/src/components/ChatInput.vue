@@ -99,6 +99,7 @@ const isSpeechSupported = computed(() => {
 
 // 语音识别实例
 let recognition = null
+let recognitionStarted = false  // 追踪底层识别器是否已启动
 if (isSpeechSupported.value) {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
   recognition = new SpeechRecognition()
@@ -130,22 +131,26 @@ if (isSpeechSupported.value) {
 
   recognition.onend = () => {
     isListening.value = false
+    recognitionStarted = false
   }
 
   recognition.onerror = () => {
     isListening.value = false
+    recognitionStarted = false
   }
 }
 
 /** 切换语音录音状态 */
 function toggleListening() {
   if (!recognition) return
-  if (isListening.value) {
+  if (isListening.value || recognitionStarted) {
     recognition.stop()
     isListening.value = false
+    recognitionStarted = false
   } else {
     recognition.start()
     isListening.value = true
+    recognitionStarted = true
   }
 }
 
