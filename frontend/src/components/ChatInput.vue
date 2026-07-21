@@ -174,15 +174,10 @@ function stopRecording() {
 async function uploadAndRecognize(audioBlob) {
   micState.value = 'uploading'
   try {
-    const response = await speechToText(audioBlob)
-    if (response.ok) {
-      const data = await response.json()
-      if (data.text) {
-        text.value += data.text
-        nextTick(autoResize)
-      }
-    } else {
-      console.warn('语音识别请求失败:', response.status)
+    const data = await speechToText(audioBlob)
+    if (data.text) {
+      text.value += data.text
+      nextTick(autoResize)
     }
   } catch (e) {
     console.warn('语音识别异常:', e)

@@ -56,16 +56,13 @@ export function sendMessage(conversationId, content, signal) {
  * 语音识别：上传音频文件，返回识别文字
  * @param {Blob} audioBlob - 录音产生的音频 Blob
  */
-export function speechToText(audioBlob) {
-  const token = localStorage.getItem('access_token')
-  const baseURL = import.meta.env.VITE_API_BASE_URL || ''
+export async function speechToText(audioBlob) {
+  const api = (await import('./request.js')).default
   const formData = new FormData()
   formData.append('file', audioBlob, 'audio.webm')
-  return fetch(`${baseURL}/api/chat/speech-to-text`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-    body: formData,
+  const res = await api.post('/api/chat/speech-to-text', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 30000,
   })
+  return res.data
 }
