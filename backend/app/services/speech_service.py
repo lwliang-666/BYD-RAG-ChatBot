@@ -141,7 +141,7 @@ async def speech_to_text(audio_data: bytes) -> str:
 
                 code = resp_data.get("code", -1)
                 if code != 0:
-                    logger.error(f"讯飞语音听写错误: code={code}, message={resp_data.get('message', '')}")
+                    logger.error(f"讯飞语音听写错误: code={code}, message={resp_data.get('message', '')}, sid={resp_data.get('sid', '')}")
                     break
 
                 data = resp_data.get("data", {})
@@ -151,6 +151,8 @@ async def speech_to_text(audio_data: bytes) -> str:
                 for ws_item in ws_list:
                     for cw_item in ws_item.get("cw", []):
                         result_text += cw_item.get("w", "")
+
+                logger.info(f"讯飞返回帧: status={data.get('status')}, 累计文字={repr(result_text)}, 原始data={json.dumps(data, ensure_ascii=False)[:300]}")
 
                 # 识别结束
                 if data.get("status") == 2:
