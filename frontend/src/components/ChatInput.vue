@@ -105,7 +105,7 @@ if (isSpeechSupported.value) {
   recognition = new SpeechRecognition()
   recognition.lang = 'zh-CN'
   recognition.interimResults = true
-  recognition.continuous = false
+  recognition.continuous = true  // 持续识别直到用户主动停止，避免 Chrome 过早结束
 
   recognition.onresult = (event) => {
     let interimTranscript = ''
@@ -118,23 +118,38 @@ if (isSpeechSupported.value) {
         interimTranscript += transcript
       }
     }
-    // 最终结果填入输入框
+    // 最终结果追加到输入框
     if (finalTranscript) {
-      text.value = finalTranscript
+      text.value += finalTranscript
       nextTick(autoResize)
     } else if (interimTranscript) {
-      // 中间结果实时显示
-      text.value = interimTranscript
+      // 中间结果实时显示（替换之前的中间结果）
+      // 去掉上一次的中间结果，追加新的
+      const lastInterimIdx = text.value.lastIndexOf('...')
+      if (lastInterimIdx !== -1 && lastInterimIdx === text.value.length - 3) {
+        text.value = text.value.slice(0, lastInterimIdx)
+      }
+      text.value += interimTranscript + '...'
       nextTick(autoResize)
     }
   }
 
   recognition.onend = () => {
+    // 清除末尾的中间结果标记
+    const lastInterimIdx = text.value.lastIndexOf('...')
+    if (lastInterimIdx !== -1 && lastInterimIdx === text.value.length - 3) {
+      text.value = text.value.slice(0, lastInterimIdx)
+      nextTick(autoResize)
+    }
     isListening.value = false
     recognitionStarted = false
   }
 
-  recognition.onerror = () => {
+  recognition.onerror = (event) => {
+    // no-speech 是用户没说话的静默超时，不算真正的错误
+    if (event.error !== 'no-speech') {
+      console.warn('语音识别错误:', event.error)
+    }
     isListening.value = false
     recognitionStarted = false
   }
