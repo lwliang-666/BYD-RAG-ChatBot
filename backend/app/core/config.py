@@ -49,6 +49,11 @@ class Settings(BaseSettings):
     USER_DAILY_QUESTION_LIMIT: int = 20   # 每个用户每天最多提问次数
     GLOBAL_DAILY_QUESTION_LIMIT: int = 300  # 全局每天最多提问次数
 
+    # 讯飞语音听写配置
+    XFYUN_APP_ID: str = ""
+    XFYUN_API_KEY: str = ""
+    XFYUN_API_SECRET: str = ""
+
     model_config = {
         "env_file": ".env",
         "env_file_encoding": "utf-8",

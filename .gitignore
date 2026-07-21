@@ -49,3 +49,4 @@ backend/uploads/
 # Resume
 resume.pdf
 generate_resume.py
+interview-questions.md
