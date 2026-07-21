@@ -9,7 +9,7 @@
 import logging
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status, Query
+from fastapi import APIRouter, Depends, HTTPException, Request, status, Query, UploadFile, File
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -193,3 +193,82 @@ async def send_message(
         media_type="text/event-stream",
         background=BackgroundTask(save_assistant_message),
     )
+
+
+@router.post("/speech-to-text")
+async def speech_to_text_api(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+):
+    """语音识别接口：接收音频文件，调用讯飞语音听写 API 返回识别文字
+
+    支持的音频格式：webm、wav、mp3 等浏览器 MediaRecorder 输出的格式。
+    音频大小限制 5MB。
+    """
+    # 检查文件大小（5MB 限制）
+    content = await file.read()
+    if len(content) > 5 * 1024 * 1024:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="音频文件大小不能超过5MB",
+        )
+
+    # 将音频转为 PCM 16k 16bit 单声道
+    pcm_data = await _convert_to_pcm(content, file.content_type or "")
+
+    # 调用讯飞语音听写
+    from app.services.speech_service import speech_to_text
+    text = await speech_to_text(pcm_data)
+
+    return {"text": text}
+
+
+async def _convert_to_pcm(audio_data: bytes, content_type: str) -> bytes:
+    """将音频数据转为 PCM 16k 16bit 单声道格式
+
+    使用 ffmpeg 进行格式转换。如果转换失败，假设原始数据已是 PCM 格式。
+    """
+    import subprocess
+    import tempfile
+    import os
+
+    # 写入临时文件
+    with tempfile.NamedTemporaryFile(suffix=".webm", delete=False) as tmp_in:
+        tmp_in.write(audio_data)
+        tmp_in_path = tmp_in.name
+
+    tmp_out_path = tmp_in_path + ".pcm"
+
+    try:
+        # 使用 ffmpeg 转换为 PCM 16k 16bit 单声道
+        process = subprocess.run(
+            [
+                "ffmpeg", "-y", "-i", tmp_in_path,
+                "-f", "s16le",           # PCM signed 16-bit little-endian
+                "-acodec", "pcm_s16le",  # PCM 16-bit
+                "-ar", "16000",           # 采样率 16k
+                "-ac", "1",               # 单声道
+                tmp_out_path,
+            ],
+            capture_output=True,
+            timeout=10,
+        )
+
+        if process.returncode == 0 and os.path.exists(tmp_out_path):
+            with open(tmp_out_path, "rb") as f:
+                return f.read()
+        else:
+            logger.warning(f"ffmpeg 转换失败: {process.stderr.decode('utf-8', errors='ignore')[:200]}")
+            # 转换失败时直接返回原始数据
+            return audio_data
+    except FileNotFoundError:
+        logger.warning("ffmpeg 未安装，无法转换音频格式")
+        return audio_data
+    except subprocess.TimeoutExpired:
+        logger.warning("ffmpeg 转换超时")
+        return audio_data
+    finally:
+        # 清理临时文件
+        for path in [tmp_in_path, tmp_out_path]:
+            if os.path.exists(path):
+                os.unlink(path)
