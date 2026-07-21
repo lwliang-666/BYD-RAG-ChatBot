@@ -82,6 +82,7 @@ BYD-RAG-ChatBot/
 |   |   |   +-- chat_service.py
 |   |   |   +-- user_service.py
 |   |   |   +-- rag_service.py
+|   |   |   +-- speech_service.py
 |   |   |   +-- rate_limit_service.py
 |   |   +-- rag/
 |   |   |   +-- embedding.py
@@ -203,7 +204,13 @@ BYD-RAG-ChatBot/
 | POST | /api/user/avatar | 上传头像 |
 | PUT | /api/user/username | 修改用户名(唯一性校验) |
 
-### 4.4 SSE 流式响应格式
+### 4.5 语音识别接口
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | /api/chat/speech-to-text | 上传音频文件，调用讯飞语音听写 API 返回识别文字 |
+
+### 4.6 SSE 流式响应格式
 
 聊天接口采用 Server-Sent Events 流式返回:
 
@@ -218,7 +225,7 @@ event: done
 data: {"remaining": {"user_remaining": 15, "global_remaining": 280}}
 ```
 
-### 4.5 提问次数限制
+### 4.7 提问次数限制
 
 - 每个用户每天最多提问 20 次
 - 全局每天最多提问 300 次
@@ -331,7 +338,7 @@ flowchart LR
 - 对话列表: 支持三点按钮菜单(重命名/置顶/删除)
 - 消息展示: 用户消息靠右, AI 消息靠左, 支持 Markdown 渲染
 - AI 回答: SSE 流式逐字显示, 底部展示引用来源
-- 语音输入: 输入框旁麦克风按钮, 使用 Web Speech API SpeechRecognition 实现中文语音识别, 识别结果实时填入输入框, 录音中显示红色脉冲动画, 不支持语音识别的浏览器自动隐藏按钮
+- 语音输入: 输入框旁麦克风按钮, 前端使用 MediaRecorder 录音, 上传到后端调用讯飞语音听写 WebSocket API 识别, 结果填入输入框后用户手动发送, 录音中显示红色脉冲动画, 识别中显示"识别中"提示
 - 语音播放: AI 消息和流式内容支持语音朗读, 使用 Web Speech API SpeechSynthesis, 自动去除 Markdown 标记后朗读纯文本, 播放中按钮高亮, 点击可停止
 - 头像上传: 点击头像弹出文件选择, 支持 jpg/png/gif/webp, 大小限制 2MB
 - 用户名修改: 双击用户名或单击编辑图标进入编辑模式, 失焦时校验唯一性
@@ -492,7 +499,7 @@ flowchart LR
   - 发送按钮(发送中禁用)
   - 暴露 setText 方法供外部填入内容
   - 清空按钮(输入框有内容时显示, 点击清空并聚焦)
-  - 语音输入按钮(使用 Web Speech API SpeechRecognition, 中文识别, 录音中红色脉冲动画)
+  - 语音输入按钮(MediaRecorder 录音, 上传后端讯飞语音识别 API, 录音中红色脉冲动画, 识别中提示)
 - SSE 流式接收:
   - 使用 EventSource 或 fetch + ReadableStream
   - 逐字追加 AI 回答内容
@@ -620,6 +627,11 @@ MAX_AVATAR_SIZE_MB=2
 # 提问次数限制
 USER_DAILY_QUESTION_LIMIT=20
 GLOBAL_DAILY_QUESTION_LIMIT=300
+
+# 讯飞语音听写（流式版）WebAPI
+XFYUN_APP_ID=xxx
+XFYUN_API_KEY=xxx
+XFYUN_API_SECRET=xxx
 ```
 
 ---
