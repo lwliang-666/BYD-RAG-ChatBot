@@ -97,15 +97,28 @@ const isSpeechSupported = computed(() => {
   return !!(window.SpeechRecognition || window.webkitSpeechRecognition)
 })
 
-// 语音识别实例
 let recognition = null
-let recognitionStarted = false  // 追踪底层识别器是否已启动，只在 onend/onerror 中重置
-if (isSpeechSupported.value) {
+
+/** 切换语音录音状态 */
+function toggleListening() {
+  if (isListening.value) {
+    // 立即重置 UI 状态，不依赖异步回调
+    stopRecognition()
+    return
+  }
+  startRecognition()
+}
+
+/** 开始语音识别 */
+function startRecognition() {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+  if (!SpeechRecognition) return
+
+  // 每次启动创建新实例，避免状态残留
   recognition = new SpeechRecognition()
   recognition.lang = 'zh-CN'
   recognition.interimResults = true
-  recognition.continuous = true  // 持续识别直到用户主动停止，避免 Chrome 过早结束
+  recognition.continuous = true
 
   recognition.onresult = (event) => {
     let interimTranscript = ''
@@ -118,61 +131,52 @@ if (isSpeechSupported.value) {
         interimTranscript += transcript
       }
     }
-    // 最终结果追加到输入框
     if (finalTranscript) {
       text.value += finalTranscript
       nextTick(autoResize)
     } else if (interimTranscript) {
-      // 中间结果实时显示（替换之前的中间结果）
-      // 去掉上一次的中间结果，追加新的
-      const lastInterimIdx = text.value.lastIndexOf('...')
-      if (lastInterimIdx !== -1 && lastInterimIdx === text.value.length - 3) {
-        text.value = text.value.slice(0, lastInterimIdx)
-      }
-      text.value += interimTranscript + '...'
+      text.value += interimTranscript
       nextTick(autoResize)
     }
   }
 
   recognition.onend = () => {
-    // 清除末尾的中间结果标记
-    const lastInterimIdx = text.value.lastIndexOf('...')
-    if (lastInterimIdx !== -1 && lastInterimIdx === text.value.length - 3) {
-      text.value = text.value.slice(0, lastInterimIdx)
-      nextTick(autoResize)
-    }
     isListening.value = false
-    recognitionStarted = false
+    recognition = null
   }
 
   recognition.onerror = (event) => {
-    // no-speech 是用户没说话的静默超时，不算真正的错误
-    if (event.error !== 'no-speech') {
+    if (event.error !== 'no-speech' && event.error !== 'aborted') {
       console.warn('语音识别错误:', event.error)
     }
     isListening.value = false
-    recognitionStarted = false
+    recognition = null
+  }
+
+  try {
+    recognition.start()
+    isListening.value = true
+  } catch (e) {
+    console.warn('语音识别启动失败:', e)
+    isListening.value = false
+    recognition = null
   }
 }
 
-/** 切换语音录音状态 */
-function toggleListening() {
-  if (!recognition) return
-  if (isListening.value || recognitionStarted) {
-    // 停止录音，状态由 onend 回调重置
-    recognition.stop()
-  } else {
-    recognition.start()
-    isListening.value = true
-    recognitionStarted = true
+/** 停止语音识别 */
+function stopRecognition() {
+  if (recognition) {
+    try {
+      recognition.stop()
+    } catch {}
+    recognition = null
   }
+  isListening.value = false
 }
 
 // 组件卸载时停止录音
 onUnmounted(() => {
-  if (recognition && isListening.value) {
-    recognition.stop()
-  }
+  stopRecognition()
 })
 
 /** 发送消息：校验内容非空且剩余次数充足后触发 send 事件，并清空输入框 */
