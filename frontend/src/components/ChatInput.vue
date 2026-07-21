@@ -1,7 +1,7 @@
 <!--
   ChatInput.vue - 聊天输入框组件
   提供消息输入、发送、停止流式响应、一键清空、语音输入等功能
-  支持自动高度调整、Enter 快捷发送、流式状态切换、语音识别等交互
+  语音输入使用 MediaRecorder 录音，上传后端讯飞语音识别 API 转文字
 -->
 <template>
   <div class="chat-input">
@@ -11,7 +11,7 @@
         ref="textareaRef"
         v-model="text"
         class="chat-input__textarea"
-        placeholder="输入您的问题..."
+        :placeholder="micPlaceholder"
         rows="1"
         :disabled="disabled || remainingQuestions === 0"
         @keydown.enter.exact.prevent="handleSend"
@@ -29,14 +29,14 @@
           <line x1="6" y1="6" x2="18" y2="18"/>
         </svg>
       </button>
-      <!-- 语音输入按钮：使用浏览器原生 SpeechRecognition -->
+      <!-- 语音输入按钮：MediaRecorder 录音 + 后端讯飞识别 -->
       <button
-        v-if="isSpeechSupported"
-        :class="['chat-input__mic', { 'chat-input__mic--active': isListening }]"
-        :title="isListening ? '停止录音' : '语音输入'"
-        :disabled="disabled || remainingQuestions === 0"
-        @click="toggleListening"
+        :class="['chat-input__mic', { 'chat-input__mic--active': micState === 'recording' || micState === 'uploading' }]"
+        :title="micTitle"
+        :disabled="micDisabled"
+        @click="toggleMic"
       >
+        <!-- 麦克风图标 -->
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
           <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
@@ -76,6 +76,7 @@
 
 <script setup>
 import { ref, computed, nextTick, onUnmounted } from 'vue'
+import { speechToText } from '../api/chat'
 
 // 组件属性
 const props = defineProps({
@@ -91,92 +92,112 @@ const emit = defineEmits(['send', 'stop'])
 const text = ref('')
 const textareaRef = ref(null)
 
-// 语音识别相关状态
-const isListening = ref(false)
-const isSpeechSupported = computed(() => {
-  return !!(window.SpeechRecognition || window.webkitSpeechRecognition)
+// 语音输入状态：idle / recording / uploading
+const micState = ref('idle')
+let mediaRecorder = null
+let audioChunks = []
+
+/** 麦克风按钮是否禁用 */
+const micDisabled = computed(() => {
+  if (props.disabled || props.remainingQuestions === 0) return true
+  return false
 })
 
-let recognition = null
+/** 麦克风按钮提示文字 */
+const micTitle = computed(() => {
+  if (micState.value === 'recording') return '停止录音'
+  if (micState.value === 'uploading') return '识别中...'
+  return '语音输入'
+})
 
-/** 切换语音录音状态 */
-function toggleListening() {
-  if (isListening.value) {
-    // 立即重置 UI 状态，不依赖异步回调
-    stopRecognition()
-    return
+/** 输入框 placeholder */
+const micPlaceholder = computed(() => {
+  if (micState.value === 'recording') return '正在录音，点击麦克风停止...'
+  if (micState.value === 'uploading') return '正在识别语音...'
+  return '输入您的问题...'
+})
+
+/** 切换麦克风状态 */
+async function toggleMic() {
+  if (micState.value === 'recording') {
+    stopRecording()
+  } else if (micState.value === 'idle') {
+    startRecording()
   }
-  startRecognition()
+  // uploading 状态下不响应点击
 }
 
-/** 开始语音识别 */
-function startRecognition() {
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
-  if (!SpeechRecognition) return
+/** 开始录音 */
+async function startRecording() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    audioChunks = []
+    mediaRecorder = new MediaRecorder(stream)
 
-  // 每次启动创建新实例，避免状态残留
-  recognition = new SpeechRecognition()
-  recognition.lang = 'zh-CN'
-  recognition.interimResults = true
-  recognition.continuous = true
-
-  recognition.onresult = (event) => {
-    let interimTranscript = ''
-    let finalTranscript = ''
-    for (let i = event.resultIndex; i < event.results.length; i++) {
-      const transcript = event.results[i][0].transcript
-      if (event.results[i].isFinal) {
-        finalTranscript += transcript
-      } else {
-        interimTranscript += transcript
+    mediaRecorder.ondataavailable = (event) => {
+      if (event.data.size > 0) {
+        audioChunks.push(event.data)
       }
     }
-    if (finalTranscript) {
-      text.value += finalTranscript
-      nextTick(autoResize)
-    } else if (interimTranscript) {
-      text.value += interimTranscript
-      nextTick(autoResize)
+
+    mediaRecorder.onstop = async () => {
+      // 停止所有音轨
+      stream.getTracks().forEach(track => track.stop())
+
+      if (audioChunks.length === 0) {
+        micState.value = 'idle'
+        return
+      }
+
+      // 生成音频 Blob 并上传
+      const audioBlob = new Blob(audioChunks, { type: 'audio/webm' })
+      await uploadAndRecognize(audioBlob)
     }
-  }
 
-  recognition.onend = () => {
-    isListening.value = false
-    recognition = null
-  }
-
-  recognition.onerror = (event) => {
-    if (event.error !== 'no-speech' && event.error !== 'aborted') {
-      console.warn('语音识别错误:', event.error)
-    }
-    isListening.value = false
-    recognition = null
-  }
-
-  try {
-    recognition.start()
-    isListening.value = true
+    mediaRecorder.start()
+    micState.value = 'recording'
   } catch (e) {
-    console.warn('语音识别启动失败:', e)
-    isListening.value = false
-    recognition = null
+    console.warn('麦克风启动失败:', e)
+    micState.value = 'idle'
   }
 }
 
-/** 停止语音识别 */
-function stopRecognition() {
-  if (recognition) {
-    try {
-      recognition.stop()
-    } catch {}
-    recognition = null
+/** 停止录音 */
+function stopRecording() {
+  if (mediaRecorder && mediaRecorder.state === 'recording') {
+    mediaRecorder.stop()
   }
-  isListening.value = false
+  micState.value = 'uploading'
+}
+
+/** 上传音频并识别 */
+async function uploadAndRecognize(audioBlob) {
+  micState.value = 'uploading'
+  try {
+    const response = await speechToText(audioBlob)
+    if (response.ok) {
+      const data = await response.json()
+      if (data.text) {
+        text.value += data.text
+        nextTick(autoResize)
+      }
+    } else {
+      console.warn('语音识别请求失败:', response.status)
+    }
+  } catch (e) {
+    console.warn('语音识别异常:', e)
+  } finally {
+    micState.value = 'idle'
+    mediaRecorder = null
+    audioChunks = []
+  }
 }
 
 // 组件卸载时停止录音
 onUnmounted(() => {
-  stopRecognition()
+  if (mediaRecorder && mediaRecorder.state === 'recording') {
+    mediaRecorder.stop()
+  }
 })
 
 /** 发送消息：校验内容非空且剩余次数充足后触发 send 事件，并清空输入框 */
@@ -313,7 +334,7 @@ defineExpose({ setText, focus })
   cursor: not-allowed;
   opacity: 0.5;
 }
-/* 录音中状态：红色脉冲动画 */
+/* 录音中/上传中状态：红色脉冲动画 */
 .chat-input__mic--active {
   color: #fff;
   background: #ef4444;
