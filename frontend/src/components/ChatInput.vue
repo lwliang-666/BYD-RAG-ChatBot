@@ -99,7 +99,7 @@ const isSpeechSupported = computed(() => {
 
 // 语音识别实例
 let recognition = null
-let recognitionStarted = false  // 追踪底层识别器是否已启动
+let recognitionStarted = false  // 追踪底层识别器是否已启动，只在 onend/onerror 中重置
 if (isSpeechSupported.value) {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
   recognition = new SpeechRecognition()
@@ -144,9 +144,8 @@ if (isSpeechSupported.value) {
 function toggleListening() {
   if (!recognition) return
   if (isListening.value || recognitionStarted) {
+    // 停止录音，状态由 onend 回调重置
     recognition.stop()
-    isListening.value = false
-    recognitionStarted = false
   } else {
     recognition.start()
     isListening.value = true
