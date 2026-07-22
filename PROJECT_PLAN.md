@@ -594,14 +594,11 @@ highlight.js@11
 
 ---
 
-## 九、关键配置项 (.env)
+## 九、关键配置项
 
+**公共配置** (`backend/.env`，提交到 git)：
 ```
-# 数据库
-DATABASE_URL=postgresql+asyncpg://postgres:password@localhost:5432/byd_rag
-
 # JWT
-JWT_SECRET_KEY=your-secret-key-change-in-production
 JWT_ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=30
 REFRESH_TOKEN_EXPIRE_DAYS=7
@@ -629,8 +626,14 @@ USER_DAILY_QUESTION_LIMIT=20
 GLOBAL_DAILY_QUESTION_LIMIT=300
 ```
 
-**密钥配置** (`.env.secrets`，不提交到 git，云服务器通过环境变量或此文件设置)：
+**密钥配置** (`backend/.env.secrets`，不提交 git，服务器 chmod 600)：
 ```
+# 数据库
+DATABASE_URL=postgresql+asyncpg://postgres:password@localhost:5432/byd_rag
+
+# JWT 签名密钥
+JWT_SECRET_KEY=xxx
+
 # LLM API 密钥
 LLM_API_KEY=xxx
 
