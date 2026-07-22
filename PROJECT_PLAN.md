@@ -606,7 +606,7 @@ JWT_ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=30
 REFRESH_TOKEN_EXPIRE_DAYS=7
 
-# LLM (LLM_API_KEY 从系统环境变量 XFXC_API_KEY 读取)
+# LLM
 LLM_MODEL_ID=astron-code-latest
 LLM_BASE_URL=https://maas-coding-api.cn-huabei-1.xf-yun.com/v2
 
@@ -627,8 +627,14 @@ MAX_AVATAR_SIZE_MB=2
 # 提问次数限制
 USER_DAILY_QUESTION_LIMIT=20
 GLOBAL_DAILY_QUESTION_LIMIT=300
+```
 
-# 讯飞语音听写（流式版）WebAPI
+**密钥配置** (`.env.secrets`，不提交到 git，云服务器通过环境变量或此文件设置)：
+```
+# LLM API 密钥
+LLM_API_KEY=xxx
+
+# 讯飞语音听写
 XFYUN_APP_ID=xxx
 XFYUN_API_KEY=xxx
 XFYUN_API_SECRET=xxx
