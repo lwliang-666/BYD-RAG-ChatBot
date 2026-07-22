@@ -55,7 +55,8 @@ class Settings(BaseSettings):
     XFYUN_API_SECRET: str = ""
 
     model_config = {
-        "env_file": ".env",
+        # 先加载 .env（公共配置），再加载 .env.secrets（密钥），后者覆盖前者
+        "env_file": [".env", ".env.secrets"],
         "env_file_encoding": "utf-8",
     }
 

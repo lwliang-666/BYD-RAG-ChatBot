@@ -29,8 +29,7 @@ frontend/dist/
 Thumbs.db
 
 # Environment
-.env
-backend/.env
+backend/.env.secrets
 !.env.example
 
 # Uploads
