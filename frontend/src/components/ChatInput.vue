@@ -130,9 +130,22 @@ async function toggleMic() {
 /** 开始录音 */
 async function startRecording() {
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        channelCount: 1,
+        sampleRate: 16000,
+      }
+    })
     audioChunks = []
-    mediaRecorder = new MediaRecorder(stream)
+
+    // 选择浏览器支持的 MIME 类型，优先 webm/opus
+    const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+      ? 'audio/webm;codecs=opus'
+      : MediaRecorder.isTypeSupported('audio/webm')
+        ? 'audio/webm'
+        : 'audio/ogg'
+
+    mediaRecorder = new MediaRecorder(stream, { mimeType })
 
     mediaRecorder.ondataavailable = (event) => {
       if (event.data.size > 0) {
@@ -150,11 +163,12 @@ async function startRecording() {
       }
 
       // 生成音频 Blob 并上传
-      const audioBlob = new Blob(audioChunks, { type: 'audio/webm' })
+      const audioBlob = new Blob(audioChunks, { type: mimeType })
       await uploadAndRecognize(audioBlob)
     }
 
-    mediaRecorder.start()
+    // 每 200ms 触发一次 ondataavailable，避免短录音数据丢失
+    mediaRecorder.start(200)
     micState.value = 'recording'
   } catch (e) {
     console.warn('麦克风启动失败:', e)

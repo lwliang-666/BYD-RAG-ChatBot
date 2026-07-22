@@ -89,7 +89,9 @@ async def speech_to_text(audio_data: bytes) -> str:
     audio_bytes = audio_data
     total_frames = (len(audio_bytes) + frame_size - 1) // frame_size
 
-    result_text = ""
+    # 动态修正结果：按 sn 序号存储每帧文字
+    # pgs="apd" 追加，pgs="rpl" 替换 rg=[from, to] 范围内的结果
+    result_sn_list = []
 
     try:
         async with websockets.connect(auth_url) as ws:
@@ -147,12 +149,31 @@ async def speech_to_text(audio_data: bytes) -> str:
                 data = resp_data.get("data", {})
                 result = data.get("result", {})
                 ws_list = result.get("ws", [])
+                pgs = result.get("pgs", "apd")
+                sn = result.get("sn", 0)
+                rg = result.get("rg", [])
 
+                # 拼接当前帧的文字
+                frame_text = ""
                 for ws_item in ws_list:
                     for cw_item in ws_item.get("cw", []):
-                        result_text += cw_item.get("w", "")
+                        frame_text += cw_item.get("w", "")
 
-                logger.info(f"讯飞返回帧: status={data.get('status')}, 累计文字={repr(result_text)}, 原始data={json.dumps(data, ensure_ascii=False)[:300]}")
+                # 动态修正处理
+                if pgs == "rpl" and rg:
+                    # 替换 rg[0] 到 rg[1] 范围内的结果
+                    rg_start, rg_end = rg[0], rg[1]
+                    # 确保 list 足够长
+                    while len(result_sn_list) < rg_end:
+                        result_sn_list.append("")
+                    # 替换范围内的文字
+                    for idx in range(rg_start - 1, rg_end):
+                        result_sn_list[idx] = ""
+                    # 将新文字放在 rg_start 位置
+                    result_sn_list[rg_start - 1] = frame_text
+                else:
+                    # apd：追加
+                    result_sn_list.append(frame_text)
 
                 # 识别结束
                 if data.get("status") == 2:
@@ -163,4 +184,5 @@ async def speech_to_text(audio_data: bytes) -> str:
     except Exception as e:
         logger.error(f"讯飞语音听写异常: {e}")
 
+    result_text = "".join(result_sn_list)
     return result_text

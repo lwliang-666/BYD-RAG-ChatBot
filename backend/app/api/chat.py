@@ -207,7 +207,6 @@ async def speech_to_text_api(
     """
     # 检查文件大小（5MB 限制）
     content = await file.read()
-    logger.info(f"语音识别：收到音频 {len(content)} 字节, content_type={file.content_type}")
     if len(content) > 5 * 1024 * 1024:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -216,12 +215,10 @@ async def speech_to_text_api(
 
     # 将音频转为 PCM 16k 16bit 单声道
     pcm_data = await _convert_to_pcm(content, file.content_type or "")
-    logger.info(f"语音识别：PCM 数据 {len(pcm_data)} 字节")
 
     # 调用讯飞语音听写
     from app.services.speech_service import speech_to_text
     text = await speech_to_text(pcm_data)
-    logger.info(f"语音识别：讯飞返回 text={repr(text)}")
 
     return {"text": text}
 
@@ -258,12 +255,10 @@ async def _convert_to_pcm(audio_data: bytes, content_type: str) -> bytes:
         )
 
         if process.returncode == 0 and os.path.exists(tmp_out_path):
-            pcm_result = open(tmp_out_path, "rb").read()
-            logger.info(f"ffmpeg 转码成功：输入 {len(audio_data)} 字节 -> 输出 {len(pcm_result)} 字节")
-            return pcm_result
+            with open(tmp_out_path, "rb") as f:
+                return f.read()
         else:
-            logger.warning(f"ffmpeg 转换失败: {process.stderr.decode('utf-8', errors='ignore')[:500]}")
-            # 转换失败时直接返回原始数据
+            logger.warning(f"ffmpeg 转换失败: {process.stderr.decode('utf-8', errors='ignore')[:200]}")
             return audio_data
     except FileNotFoundError:
         logger.warning("ffmpeg 未安装，无法转换音频格式")
