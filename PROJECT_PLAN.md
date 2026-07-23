@@ -541,17 +541,17 @@ flowchart LR
 ### 阶段七: 部署与文档 (预计 1 天)
 
 **步骤 7.1: 部署配置**
-- 前端: pnpm build, Nginx 托管静态文件
-- 后端: Uvicorn + Gunicorn 多进程
-- 数据库: Docker Compose 编排
-- 环境变量: .env 配置管理
+- 前端: Vercel 托管 (lwliang.com)
+- 后端: Uvicorn 单进程 + Systemd (腾讯云 2核4G)
+- 数据库: PostgreSQL 16 + pgvector (apt 原生安装)
+- 环境变量: .env + .env.secrets 分层管理
+- 代码部署: 服务器从 GitHub 拉取，deploy.sh 一键部署
 
-**步骤 7.2: 启动脚本**
-- 编写 Makefile 或启动脚本
-- docker compose up -d (启动数据库)
-- python ingest.py (PDF 入库, 首次运行)
-- uvicorn app.main:app (启动后端)
-- pnpm dev (启动前端开发服务器)
+**步骤 7.2: 部署流程**
+- 服务器 SSH 密钥已配置 GitHub Deploy key（只读）
+- 仓库代码位于 /opt/byd-rag-repo/，运行代码位于 /opt/byd-rag/backend/
+- 执行 `/opt/byd-rag/deploy.sh` 自动拉取代码、同步、重启服务
+- PDF 数据文件已从 git 移除（.gitignore），服务器本地保留
 
 ---
 
