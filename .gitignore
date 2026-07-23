@@ -45,6 +45,9 @@ backend/uploads/
 # MCP
 .playwright-mcp/
 
+# PDF 数据文件（服务器已有，不从 git 同步）
+originData/*.pdf
+
 # Resume
 resume.pdf
 generate_resume.py
