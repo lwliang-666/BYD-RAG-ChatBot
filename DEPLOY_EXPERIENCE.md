@@ -136,20 +136,124 @@ systemctl restart postgresql
 
 ## 四、后端部署
 
-### 4.1 上传代码
+### 4.1 服务器 SSH 密钥配置
+
+在服务器上生成 GitHub 专用密钥（不复用本地密钥，方便单独撤销）：
 
 ```bash
-# 方式一：scp 上传（简单直接）
-scp -r backend/ <项目名>-server:/opt/<项目名>/
-scp -r originData/ <项目名>-server:/opt/<项目名>/
-
-# 方式二：Git 拉取（后续更新方便，但需 GitHub 网络）
-ssh <项目名>-server "cd /opt/<项目名> && git pull origin main"
+ssh-keygen -t ed25519 -C "server-deploy" -f ~/.ssh/id_ed25519_github -N ""
+cat >> ~/.ssh/config << 'EOF'
+Host github.com
+  IdentityFile ~/.ssh/id_ed25519_github
+EOF
 ```
 
-> 注意大文件（如 PDF）scp 可能超时中断，需验证文件完整性。
+把公钥添加到 GitHub 仓库 Settings > Deploy keys（不勾选 Allow write access，只读即可）。
 
-### 4.2 虚拟环境和依赖
+测试连接：`ssh -T git@github.com`，看到 "successfully authenticated" 即成功。
+
+### 4.2 服务器 clone 仓库
+
+```bash
+cd /opt
+git clone --depth 1 git@github.com:<user>/<repo>.git <repo-dir>
+```
+
+**大文件处理**：如果仓库有大文件（PDF、模型等），先从 git 历史移除再 clone，否则国内服务器 clone 极慢：
+
+```bash
+# 本地执行：从历史中移除大文件
+git filter-branch --force --index-filter 'git rm --cached --ignore-unmatch <大文件路径>' --prune-empty -- --all
+rm -rf .git/refs/original/
+git reflog expire --expire=now --all
+git gc --prune=now --aggressive
+git push origin --force --all
+```
+
+把大文件加入 `.gitignore`，服务器上单独保留。
+
+### 4.3 部署脚本
+
+创建 `/opt/<项目名>/deploy.sh`，核心逻辑：拉代码 → 同步到运行目录 → 安装依赖 → 重启服务 → 检查状态。
+
+```bash
+#!/bin/bash
+set -e
+
+# 拉取最新代码
+cd /opt/<repo-dir>
+git fetch origin
+git reset --hard origin/master
+
+# 同步到运行目录（排除服务器特有文件）
+rsync -av --delete \
+  --exclude=".env" \
+  --exclude=".env.secrets" \
+  --exclude="uploads/" \
+  --exclude="__pycache__/" \
+  --exclude="venv/" \
+  /opt/<repo-dir>/backend/ /opt/<项目名>/backend/
+
+# 安装依赖
+cd /opt/<项目名>/backend
+/opt/<项目名>/backend/venv/bin/pip install -q -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+
+# 重启服务
+sudo systemctl restart <service-name>
+sleep 2
+
+# 检查状态
+if sudo systemctl is-active --quiet <service-name>; then
+  echo "部署成功"
+else
+  echo "部署失败"
+  sudo systemctl status <service-name> --no-pager
+  exit 1
+fi
+```
+
+**关键点**：`.env`、`uploads/`、`venv/` 等服务器特有文件用 rsync `--exclude` 排除，避免被仓库代码覆盖。
+
+### 4.4 GitHub Actions 自动部署
+
+创建 `.github/workflows/deploy.yml`：
+
+```yaml
+name: Deploy Backend
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/deploy.yml'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to server
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: bash /opt/<项目名>/deploy.sh
+```
+
+**关键点**：
+- `paths` 过滤：只有后端代码变更才触发，避免前端改动无谓触发
+- 敏感信息用 GitHub Secrets，不硬编码
+
+在 GitHub 仓库 Settings > Secrets and variables > Actions 中添加：
+
+| Secret | 值 | 说明 |
+|--------|-----|------|
+| `SERVER_HOST` | 服务器 IP | |
+| `SERVER_USER` | SSH 用户名 | |
+| `SERVER_SSH_KEY` | 本地 SSH 私钥内容 | `cat ~/.ssh/<key> \| pbcopy` 复制 |
+
+### 4.5 虚拟环境和依赖（首次部署）
 
 ```bash
 cd /opt/<项目名>/backend
@@ -158,7 +262,7 @@ source venv/bin/activate
 pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 ```
 
-### 4.3 环境变量
+### 4.6 环境变量
 
 ```bash
 # 创建 .env
@@ -207,7 +311,7 @@ WantedBy=multi-user.target
 
 > `--workers` 根据内存调整，2核4G 服务器设为 1（embedding 模型占约 1GB 内存）
 
-### 4.6 踩坑记录
+### 4.7 踩坑记录
 
 | 问题 | 原因 | 解决 |
 |------|------|------|
@@ -215,6 +319,9 @@ WantedBy=multi-user.target
 | Embedding 模型加载失败 | 无法访问 huggingface.co | 设置 `HF_ENDPOINT=https://hf-mirror.com` |
 | PDF 入库 0 个文本块 | PDF 上传不完整（94MB 只传了 47MB） | 重新上传并验证文件大小 |
 | 入库进程跑 30 分钟 | embedding 计算耗时长 + 内存紧张 | 正常现象，2核4G 跑 266 页 PDF 约需 30 分钟 |
+| git clone 超时 | 仓库含大文件（90MB PDF），国内服务器访问 GitHub 慢 | 从 git 历史移除大文件，仓库从 243MB 降到 625KB |
+| filter-branch 报错 Cannot rewrite branches | 有未暂存的改动 | 先 `git stash`，filter-branch 后 `git stash pop` |
+| deploy.sh 中 pip install 导致脚本中断 | 没有新增依赖时 pip 可能返回非零退出码 | 加 `|| true` 或 `-q` 静默模式 |
 
 ---
 
@@ -454,11 +561,14 @@ sudo -u postgres psql -d <数据库名> -c "SELECT count(*) FROM users;"
 # 数据库备份
 sudo -u postgres pg_dump <数据库名> > /opt/<项目名>/backup/$(date +%Y%m%d).sql
 
-# 更新后端代码
-cd /opt/<项目名>/backend && source venv/bin/activate
-pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
-systemctl restart byd-rag-backend
+# 一键部署（手动触发）
+bash /opt/<项目名>/deploy.sh
 
 # 更新前端（推送后 Vercel 自动部署）
 git push origin master
+
+# 更新后端（推送后 GitHub Actions 自动部署）
+git push origin master
+# 仅 backend/ 目录变更时触发自动部署
+# 查看部署记录：https://github.com/<user>/<repo>/actions
 ```
