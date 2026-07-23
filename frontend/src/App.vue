@@ -3,8 +3,9 @@
   作为整个应用的入口容器，提供路由视图挂载点和全局样式重置
 -->
 <template>
-  <!-- 路由视图：根据当前路由渲染对应的页面组件 -->
   <router-view />
+  <!-- 全局 toast 通知容器 -->
+  <div id="toast-container"></div>
 </template>
 
 <style>
@@ -35,5 +36,46 @@ body {
 }
 ::-webkit-scrollbar-thumb:hover {
   background: #9ca3af;
+}
+
+/* toast 通知样式 */
+#toast-container {
+  position: fixed;
+  top: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+}
+.toast {
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  color: #fff;
+  background: #1f2937;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  animation: toast-in 0.25s ease-out;
+  pointer-events: auto;
+}
+.toast--success {
+  background: #059669;
+}
+.toast--error {
+  background: #dc2626;
+}
+.toast--leaving {
+  animation: toast-out 0.2s ease-in forwards;
+}
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes toast-out {
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(-8px); }
 }
 </style>

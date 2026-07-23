@@ -51,6 +51,7 @@
       <div class="sidebar__footer">
         <AvatarUpload
           :model-value="userStore.avatarUrl"
+          :uploading="avatarUploading"
           @upload="handleAvatarUpload"
         />
         <div class="sidebar__user-info">
@@ -533,11 +534,20 @@ async function handleNameSave() {
   } catch {}
 }
 
+// 头像上传 loading 状态
+const avatarUploading = ref(false)
+
 /** 处理头像上传 */
 async function handleAvatarUpload(file) {
+  avatarUploading.value = true
   try {
     await userStore.changeAvatar(file)
-  } catch {}
+    showToast('头像更新成功', 'success')
+  } catch {
+    showToast('头像上传失败，请重试', 'error')
+  } finally {
+    avatarUploading.value = false
+  }
 }
 
 /** 退出登录 */
