@@ -5,7 +5,7 @@
 | 前端-frontend | Vite + Vue3 + vue-router + Pinia |
 | 后端-backend  | Python + LangGraph + FastAPI |
 | 数据库-docker | Docker + PolarDB-PG (pgvector) |
-| LLM | 讯飞星火 coding plan (astron-code-latest) |
+| LLM | 智谱 GLM-5.1 |
 | Embedding | bge-large-zh-v1.5 (SentenceTransformer 本地推理) |
 | 认证 | JWT Token |
 
