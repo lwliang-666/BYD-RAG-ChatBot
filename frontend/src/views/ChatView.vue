@@ -247,10 +247,17 @@ function getBestChineseVoice() {
   if (!voices.length) return null
 
   const priorities = [
-    v => v.name === 'Ting-Ting',
+    // macOS Neural 中文女声（音质最佳）
+    v => v.name === 'Shelley (中文（中国大陆）)',
+    v => v.name === 'Sandy (中文（中国大陆）)',
+    v => v.name === 'Flo (中文（中国大陆）)',
+    // Windows 高质量中文语音
     v => v.name.includes('Huihui') || v.name.includes('Kangkang'),
-    v => v.name.includes('Google') && v.lang.startsWith('zh'),
+    // Google 中文语音（Chrome）
+    v => v.name.includes('Google') && v.lang === 'zh-CN',
+    // zh-CN 精确匹配
     v => v.lang === 'zh-CN',
+    // zh 前缀兜底
     v => v.lang.startsWith('zh'),
   ]
 
