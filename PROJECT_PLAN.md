@@ -11,7 +11,7 @@
 | 前端 | Vite + Vue3 + vue-router + Pinia |
 | 后端 | Python + LangGraph + FastAPI |
 | 数据库 | Docker + PolarDB-PG (pgvector) |
-| LLM | 讯飞星火 coding plan (astron-code-latest) |
+| LLM | 智谱 GLM-5.1 |
 | Embedding | bge-large-zh-v1.5 (SentenceTransformer 本地推理) |
 | 认证 | JWT Token |
 
@@ -320,6 +320,8 @@ flowchart LR
 ```
 
 ### 6.2 路由设计
+
+使用 Hash 模式（createWebHashHistory），避免部署后刷新 404 问题。
 
 | 路径 | 组件 | 权限 |
 |------|------|------|
