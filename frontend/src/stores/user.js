@@ -9,11 +9,12 @@ import { getProfile, updateProfile, updateUsername, uploadAvatar } from '../api/
 // API 基础地址，用于拼接相对路径的头像 URL
 const apiBaseURL = import.meta.env.VITE_API_BASE_URL || ''
 
-/** 将相对路径的头像 URL 转为完整地址 */
+/** 将相对路径的头像 URL 转为完整地址，加时间戳避免浏览器缓存 */
 function resolveAvatarUrl(url) {
   if (!url) return ''
-  if (url.startsWith('http')) return url
-  return `${apiBaseURL}${url}`
+  const fullUrl = url.startsWith('http') ? url : `${apiBaseURL}${url}`
+  const separator = fullUrl.includes('?') ? '&' : '?'
+  return `${fullUrl}${separator}t=${Date.now()}`
 }
 
 export const useUserStore = defineStore('user', () => {

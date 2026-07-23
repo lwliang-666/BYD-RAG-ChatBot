@@ -2,11 +2,11 @@
  * router/index.js - 前端路由配置
  * 定义应用的路由规则和导航守卫，控制页面访问权限
  */
-import { createRouter, createWebHistory } from 'vue-router'
+import { createRouter, createWebHashHistory } from 'vue-router'
 
 // 路由配置：使用懒加载方式引入页面组件
 const router = createRouter({
-  history: createWebHistory(),
+  history: createWebHashHistory(),
   routes: [
     {
       path: '/login',
