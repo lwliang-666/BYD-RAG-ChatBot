@@ -143,6 +143,32 @@ function stripMarkdown(mdText) {
     .trim()
 }
 
+/** 获取最佳中文语音（按质量优先级选择） */
+function getBestChineseVoice() {
+  const voices = window.speechSynthesis.getVoices()
+  if (!voices.length) return null
+
+  // 优先级：高质量中文语音 > zh-CN 精确匹配 > zh 前缀
+  const priorities = [
+    // macOS 高质量中文语音
+    v => v.name === 'Ting-Ting',
+    // Windows 高质量中文语音
+    v => v.name.includes('Huihui') || v.name.includes('Kangkang'),
+    // Google 中文语音（Chrome）
+    v => v.name.includes('Google') && v.lang.startsWith('zh'),
+    // 精确匹配 zh-CN
+    v => v.lang === 'zh-CN',
+    // zh 前缀兜底
+    v => v.lang.startsWith('zh'),
+  ]
+
+  for (const matcher of priorities) {
+    const voice = voices.find(matcher)
+    if (voice) return voice
+  }
+  return null
+}
+
 /** 切换语音播放状态 */
 function toggleSpeech() {
   if (isPlaying.value) {
@@ -156,14 +182,12 @@ function toggleSpeech() {
 
   const utterance = new SpeechSynthesisUtterance(plainText)
   utterance.lang = 'zh-CN'
-  utterance.rate = 1.0
+  utterance.rate = 0.9
   utterance.pitch = 1.0
 
-  // 优先选择中文语音
-  const voices = window.speechSynthesis.getVoices()
-  const zhVoice = voices.find(v => v.lang.startsWith('zh'))
-  if (zhVoice) {
-    utterance.voice = zhVoice
+  const voice = getBestChineseVoice()
+  if (voice) {
+    utterance.voice = voice
   }
 
   utterance.onend = () => {

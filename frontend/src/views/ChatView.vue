@@ -241,6 +241,26 @@ function stripMarkdown(mdText) {
     .trim()
 }
 
+/** 获取最佳中文语音（按质量优先级选择） */
+function getBestChineseVoice() {
+  const voices = window.speechSynthesis.getVoices()
+  if (!voices.length) return null
+
+  const priorities = [
+    v => v.name === 'Ting-Ting',
+    v => v.name.includes('Huihui') || v.name.includes('Kangkang'),
+    v => v.name.includes('Google') && v.lang.startsWith('zh'),
+    v => v.lang === 'zh-CN',
+    v => v.lang.startsWith('zh'),
+  ]
+
+  for (const matcher of priorities) {
+    const voice = voices.find(matcher)
+    if (voice) return voice
+  }
+  return null
+}
+
 /** 切换流式内容语音播放 */
 function toggleStreamingSpeech() {
   if (isStreamingPlaying.value) {
@@ -254,13 +274,12 @@ function toggleStreamingSpeech() {
 
   const utterance = new SpeechSynthesisUtterance(plainText)
   utterance.lang = 'zh-CN'
-  utterance.rate = 1.0
+  utterance.rate = 0.9
   utterance.pitch = 1.0
 
-  const voices = window.speechSynthesis.getVoices()
-  const zhVoice = voices.find(v => v.lang.startsWith('zh'))
-  if (zhVoice) {
-    utterance.voice = zhVoice
+  const voice = getBestChineseVoice()
+  if (voice) {
+    utterance.voice = voice
   }
 
   utterance.onend = () => {
