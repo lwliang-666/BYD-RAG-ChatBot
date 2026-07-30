@@ -27,6 +27,8 @@ class StreamState:
         self.sources = None
         self.stopped = False
         self.conversation_id = None
+        self.message_id = None  # 保存后的助手消息 ID
+        self.saved = False      # 标记是否已保存，避免 BackgroundTask 重复保存
 
 
 async def stream_chat(
@@ -108,4 +110,6 @@ async def stream_chat(
     done_data = {}
     if remaining_info:
         done_data["remaining"] = remaining_info
+    if stream_state and stream_state.message_id:
+        done_data["message_id"] = str(stream_state.message_id)
     yield f"event: done\ndata: {json.dumps(done_data)}\n\n"

@@ -189,7 +189,7 @@ import MarkdownIt from 'markdown-it'
 import { useAuthStore } from '../stores/auth'
 import { useChatStore } from '../stores/chat'
 import { useUserStore } from '../stores/user'
-import { sendMessage } from '../api/chat'
+import { sendMessage, getConversation } from '../api/chat'
 import ChatMessage from '../components/ChatMessage.vue'
 import ChatInput from '../components/ChatInput.vue'
 import AvatarUpload from '../components/AvatarUpload.vue'
@@ -353,8 +353,9 @@ async function handleNewConversation() {
 /**
  * 发送消息并处理 SSE 流式响应
  * 解析服务端推送的 token/sources/done 事件，实时更新流式内容
+ * 网络断开时自动重试，重试前先检查后端是否已保存完整回答
  */
-async function handleSend(content) {
+async function handleSend(content, retryCount = 0) {
   if (!chatStore.currentConversation) return
   chatStore.isSending = true
   chatStore.streamingContent = ''
@@ -363,8 +364,10 @@ async function handleSend(content) {
   const controller = new AbortController()
   chatStore.abortController = controller
 
-  // 先将用户消息添加到消息列表
-  chatStore.addMessage('user', content)
+  // 仅在首次发送时添加用户消息（重试时不重复添加）
+  if (retryCount === 0) {
+    chatStore.addMessage('user', content)
+  }
 
   try {
     // 发起 SSE 流式请求
@@ -428,9 +431,38 @@ async function handleSend(content) {
       }
       chatStore.streamingContent = ''
     } else {
-      // 其他错误，显示错误提示
-      chatStore.addMessage('assistant', '抱歉，发生了错误，请稍后再试。')
-      chatStore.streamingContent = ''
+      // 网络错误或其他异常，尝试自动重试
+      const isNetworkError = !e.response || e.name === 'TypeError' || e.message?.includes('network') || e.message?.includes('fetch')
+      const maxRetries = 3
+
+      if (isNetworkError && retryCount < maxRetries) {
+        // 显示重连提示
+        chatStore.streamingContent = ''
+        const retryDelay = Math.min(1000 * Math.pow(2, retryCount), 5000)
+
+        // 重试前先检查后端是否已保存完整回答
+        try {
+          const convRes = await getConversation(chatStore.currentConversation)
+          const messages = convRes.data.messages || []
+          const lastMsg = messages[messages.length - 1]
+          if (lastMsg && lastMsg.role === 'assistant') {
+            // 后端已保存回答，直接展示
+            chatStore.addMessage('assistant', lastMsg.content, lastMsg.sources)
+            chatStore.streamingContent = ''
+            return
+          }
+        } catch {
+          // 检查失败，继续重试
+        }
+
+        // 等待退避时间后重试
+        await new Promise(resolve => setTimeout(resolve, retryDelay))
+        return handleSend(content, retryCount + 1)
+      } else {
+        // 超过重试次数或非网络错误，显示错误提示
+        chatStore.addMessage('assistant', '抱歉，网络连接中断，请检查网络后重新发送问题。')
+        chatStore.streamingContent = ''
+      }
     }
   } finally {
     chatStore.isSending = false

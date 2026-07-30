@@ -152,3 +152,14 @@ async def get_chat_history(db: AsyncSession, conversation_id: uuid.UUID, limit: 
     # 倒序查询后反转为时间正序
     messages = list(reversed(result.scalars().all()))
     return [{"role": m.role, "content": m.content} for m in messages]
+
+
+async def get_last_message(db: AsyncSession, conversation_id: uuid.UUID) -> Optional[Message]:
+    """获取对话中最后一条消息，用于幂等性检查"""
+    result = await db.execute(
+        select(Message)
+        .where(Message.conversation_id == conversation_id)
+        .order_by(Message.created_at.desc())
+        .limit(1)
+    )
+    return result.scalar_one_or_none()

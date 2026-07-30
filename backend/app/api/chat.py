@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db, AsyncSessionLocal
 from app.core.deps import get_current_user
 from app.models.user import User
+from app.models.chat import Message
 from app.schemas.chat import (
     ConversationCreate, ConversationUpdate,
     ConversationResponse, ConversationDetail,
@@ -23,7 +24,7 @@ from app.schemas.chat import (
 )
 from app.services.chat_service import (
     create_conversation, get_conversations, get_conversation_detail,
-    update_conversation, delete_conversation, save_message,
+    update_conversation, delete_conversation, save_message, get_last_message,
 )
 from app.services.rag_service import stream_chat, StreamState
 from app.services.rate_limit_service import check_rate_limit, increment_user_count
@@ -111,7 +112,51 @@ async def send_message(
     使用独立的数据库会话，避免 get_db 在 StreamingResponse 消费前关闭。
     通过 StreamState 跟踪流内容，BackgroundTask 保证客户端中断时也能保存助手回答。
     包含提问次数限制检查，超限时返回 429 状态码。
+
+    幂等性保证：如果该对话最后一条消息是 user 且无对应 assistant 回复，
+    说明上次请求中断，后端已保存部分内容但前端未收到，直接返回已有回答。
     """
+    # 验证对话是否存在
+    async with AsyncSessionLocal() as check_db:
+        conversation = await get_conversation_detail(check_db, conversation_id, current_user.id)
+        if not conversation:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="对话不存在")
+
+        # 幂等性检查：如果最后一条是 user 消息且无对应 assistant 回复，说明上次请求中断
+        last_msg = await get_last_message(check_db, conversation_id)
+        if last_msg and last_msg.role == "user" and last_msg.content == data.content:
+            # 检查是否已有 assistant 回复
+            from sqlalchemy import select as sa_select
+            result = await check_db.execute(
+                sa_select(Message)
+                .where(Message.conversation_id == conversation_id, Message.role == "assistant")
+                .order_by(Message.created_at.desc())
+                .limit(1)
+            )
+            assistant_msg = result.scalar_one_or_none()
+            if assistant_msg:
+                # 后端已有回答（可能是中断时保存的部分内容），直接通过 SSE 返回
+                state = StreamState()
+                state.conversation_id = conversation_id
+                state.message_id = assistant_msg.id
+                state.saved = True
+
+                async def replay_existing_answer():
+                    """重放已有回答的 SSE 事件流"""
+                    import json as json_mod
+                    # 发送 token 事件（一次性发送完整内容）
+                    yield f"event: token\ndata: {json_mod.dumps({'content': assistant_msg.content}, ensure_ascii=False)}\n\n"
+                    # 发送 sources 事件
+                    if assistant_msg.sources:
+                        yield f"event: sources\ndata: {json_mod.dumps({'chunks': assistant_msg.sources.get('chunks', [])}, ensure_ascii=False)}\n\n"
+                    # 发送 done 事件
+                    yield f"event: done\ndata: {json_mod.dumps({'message_id': str(assistant_msg.id)})}\n\n"
+
+                return StreamingResponse(
+                    replay_existing_answer(),
+                    media_type="text/event-stream",
+                )
+
     # 检查提问次数限制
     async with AsyncSessionLocal() as check_db:
         rate_info = await check_rate_limit(check_db, current_user.id)
@@ -129,12 +174,6 @@ async def send_message(
         await increment_user_count(check_db, current_user.id)
         await check_db.commit()
 
-    # 验证对话是否存在
-    async with AsyncSessionLocal() as check_db:
-        conversation = await get_conversation_detail(check_db, conversation_id, current_user.id)
-        if not conversation:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="对话不存在")
-
     # 流式响应使用独立 session
     state = StreamState()
     db = AsyncSessionLocal()
@@ -147,6 +186,10 @@ async def send_message(
 
     async def save_assistant_message():
         """后台任务：保存已生成的助手回答（正常完成或客户端中断都会执行）"""
+        if state.saved:
+            await db.close()
+            return
+
         import sys
         print(f"[DEBUG] BackgroundTask 执行: full_answer长度={len(state.full_answer)}, stopped={state.stopped}, conversation_id={state.conversation_id}", file=sys.stderr, flush=True)
         logger.info(f"BackgroundTask 执行: full_answer长度={len(state.full_answer)}, stopped={state.stopped}, conversation_id={state.conversation_id}")
@@ -154,11 +197,13 @@ async def send_message(
             # 客户端中断时追加停止标记
             answer = state.full_answer + "\n\n*[对话已停止]*" if state.stopped else state.full_answer
             try:
-                await save_message(
+                msg = await save_message(
                     db, state.conversation_id, "assistant", answer,
                     {"chunks": state.sources} if state.sources else None,
                 )
                 await db.commit()
+                state.message_id = msg.id
+                state.saved = True
                 logger.info(f"助手消息已保存, 内容长度: {len(answer)}")
                 print(f"[DEBUG] 助手消息已保存, 内容长度: {len(answer)}", file=sys.stderr, flush=True)
             except Exception as e:
