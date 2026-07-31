@@ -6,7 +6,6 @@
 RAG 参数和文件上传等。
 """
 
-import os
 from pydantic_settings import BaseSettings
 from functools import lru_cache
 
@@ -27,9 +26,9 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
     # LLM 大语言模型配置
-    LLM_MODEL_ID: str = "astron-code-latest"
-    LLM_BASE_URL: str = "https://maas-coding-api.cn-huabei-1.xf-yun.com/v2"
-    LLM_API_KEY: str = os.getenv("XFXC_API_KEY", "")
+    LLM_MODEL_ID: str = "ark-code-latest"
+    LLM_BASE_URL: str = "https://ark.cn-beijing.volces.com/api/coding/v3"
+    LLM_API_KEY: str = ""
 
     # Embedding 向量模型配置
     EMBEDDING_MODEL_PATH: str = "BAAI/bge-large-zh-v1.5"

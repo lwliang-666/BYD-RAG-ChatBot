@@ -11,7 +11,7 @@
 | 前端 | Vite + Vue3 + vue-router + Pinia |
 | 后端 | Python + LangGraph + FastAPI |
 | 数据库 | Docker + PolarDB-PG (pgvector) |
-| LLM | 智谱 GLM-5.1 |
+| LLM | 火山方舟 ARK(ark-code-latest) |
 | Embedding | bge-large-zh-v1.5 (SentenceTransformer 本地推理) |
 | 认证 | JWT Token |
 
@@ -254,7 +254,7 @@ flowchart TD
     R --> S[pgvector 相似度检索]
     S --> T[Top-K 文档块]
     T --> U[Prompt 组装]
-    U --> V[讯飞星火 LLM]
+    U --> V[火山方舟 ARK LLM]
     V --> W[流式响应]
     W --> X[前端展示]
 ```
@@ -269,7 +269,7 @@ flowchart TD
     R --> S[pgvector 相似度检索]
     S --> T[Top-K 文档块]
     T --> U[Prompt 组装 + 历史消息]
-    U --> V[讯飞星火 LLM 流式生成]
+    U --> V[火山方舟 ARK LLM 流式生成]
     V --> W[SSE 流式响应]
     W --> X[前端展示]
 ```
@@ -424,7 +424,7 @@ flowchart LR
 **步骤 3.5: RAG 查询流程**
 - 实现 backend/app/rag/graph.py
   - 检索: 调用 retriever 获取相关文档块
-  - 生成: 组装 Prompt + 历史消息 + 调用讯飞星火 LLM
+  - 生成: 组装 Prompt + 历史消息 + 调用火山方舟 ARK LLM
   - 流式输出: 逐 token 返回前端(SSE 格式)
   - 保留 LangGraph 扩展预留(RAGState/retrieve_node/generate_node)
 
@@ -606,8 +606,8 @@ ACCESS_TOKEN_EXPIRE_MINUTES=30
 REFRESH_TOKEN_EXPIRE_DAYS=7
 
 # LLM
-LLM_MODEL_ID=astron-code-latest
-LLM_BASE_URL=https://maas-coding-api.cn-huabei-1.xf-yun.com/v2
+LLM_MODEL_ID=ark-code-latest
+LLM_BASE_URL=https://ark.cn-beijing.volces.com/api/coding/v3
 
 # Embedding
 EMBEDDING_MODEL_PATH=BAAI/bge-large-zh-v1.5
