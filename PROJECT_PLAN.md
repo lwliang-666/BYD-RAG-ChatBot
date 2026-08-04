@@ -92,6 +92,7 @@ BYD-RAG-ChatBot/
 |   |   +-- main.py
 |   +-- scripts/
 |   |   +-- ingest.py
+|   |   +-- eval_retrieval.py
 |   +-- requirements.txt
 |   +-- .env
 +-- docker/
