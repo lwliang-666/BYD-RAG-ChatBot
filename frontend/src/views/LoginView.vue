@@ -60,6 +60,7 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
+import { getApiErrorMessage } from '../utils/api-error'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -80,7 +81,7 @@ async function handleLogin() {
     // 登录成功，跳转到聊天主页
     router.push('/')
   } catch (e) {
-    error.value = '用户名或密码错误'
+    error.value = getApiErrorMessage(e, { unauthorized: '用户名或密码错误' })
   } finally {
     loading.value = false
   }

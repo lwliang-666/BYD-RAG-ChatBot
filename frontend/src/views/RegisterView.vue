@@ -71,6 +71,7 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
+import { getApiErrorMessage } from '../utils/api-error'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -98,9 +99,7 @@ async function handleRegister() {
     // 注册成功，跳转到聊天主页
     router.push('/')
   } catch (e) {
-    // 优先显示后端返回的错误信息
-    const detail = e.response?.data?.detail
-    error.value = detail || '注册失败，请稍后再试'
+    error.value = getApiErrorMessage(e, { fallback: '注册失败，请稍后再试' })
   } finally {
     loading.value = false
   }
