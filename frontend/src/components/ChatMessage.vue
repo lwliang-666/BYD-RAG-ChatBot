@@ -101,9 +101,7 @@
 
 <script setup>
 import { ref, computed, onUnmounted } from 'vue'
-import MarkdownIt from 'markdown-it'
-import hljs from 'highlight.js'
-import 'highlight.js/styles/github.css'
+import { renderMarkdown } from '../utils/markdown'
 
 // 组件属性
 const props = defineProps({
@@ -248,20 +246,8 @@ function handleFill() {
   emit('fill', props.message.content || '')
 }
 
-// Markdown 渲染器：配置代码高亮插件
-const md = new MarkdownIt({
-  highlight(str, lang) {
-    if (lang && hljs.getLanguage(lang)) {
-      try {
-        return hljs.highlight(str, { language: lang }).value
-      } catch {}
-    }
-    return ''
-  },
-})
-
-// 计算属性：将消息内容渲染为 HTML
-const renderedContent = computed(() => md.render(props.message.content || ''))
+// 计算属性：将消息内容渲染为 HTML（与流式输出共用同一渲染配置）
+const renderedContent = computed(() => renderMarkdown(props.message.content))
 </script>
 
 <style scoped>

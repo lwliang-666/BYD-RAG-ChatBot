@@ -20,8 +20,6 @@ export const useChatStore = defineStore('chat', () => {
   const isLoading = ref(false)
   // 发送中状态标记（包含流式响应期间）
   const isSending = ref(false)
-  // 流式响应的实时内容（用于逐字渲染）
-  const streamingContent = ref('')
   // AbortController 引用，用于中断流式请求
   const abortController = ref(null)
   // 今日剩余提问次数
@@ -93,7 +91,7 @@ export const useChatStore = defineStore('chat', () => {
 
   return {
     conversations, currentConversation, messages,
-    isLoading, isSending, streamingContent, abortController, remainingQuestions,
+    isLoading, isSending, abortController, remainingQuestions,
     fetchConversations, newConversation, selectConversation,
     renameConversation, togglePin, removeConversation, addMessage,
   }

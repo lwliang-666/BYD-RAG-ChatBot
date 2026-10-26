@@ -91,8 +91,8 @@
             {{ currentConvTitle }}
           </h3>
         </div>
-        <!-- 消息列表 -->
-        <div class="chat-main__messages" ref="messagesRef">
+        <!-- 消息列表：用户停留在底部附近时跟随流式输出自动滚动 -->
+        <div class="chat-main__messages" ref="messagesRef" @scroll="handleMessagesScroll">
           <ChatMessage
             v-for="msg in chatStore.messages"
             :key="msg.id"
@@ -100,8 +100,8 @@
             :avatar-url="userStore.avatarUrl"
             @fill="handleFillInput"
           />
-          <!-- 流式响应中的实时内容 -->
-          <div v-if="chatStore.streamingContent" class="chat-message chat-message--assistant">
+          <!-- 流式响应中的实时内容：文本由打字机按帧输出，末尾带闪烁光标 -->
+          <div v-if="displayedText" class="chat-message chat-message--assistant">
             <div class="chat-message__bot-avatar">AI</div>
             <div class="chat-message__body">
               <div class="chat-message__content" v-html="renderStreaming"></div>
@@ -185,11 +185,12 @@
 <script setup>
 import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
-import MarkdownIt from 'markdown-it'
 import { useAuthStore } from '../stores/auth'
 import { useChatStore } from '../stores/chat'
 import { useUserStore } from '../stores/user'
 import { sendMessage, getConversation } from '../api/chat'
+import { renderStreamingMarkdown } from '../utils/markdown'
+import { useTypewriter } from '../composables/use-typewriter'
 import ChatMessage from '../components/ChatMessage.vue'
 import ChatInput from '../components/ChatInput.vue'
 import AvatarUpload from '../components/AvatarUpload.vue'
@@ -217,8 +218,10 @@ const renamingTitle = ref('')
 const renameInputRef = ref(null)
 let renameConfirming = false  // 防止 blur 和 enter 重复触发确认
 
-// Markdown 渲染器（用于流式内容的实时渲染）
-const md = new MarkdownIt()
+// 流式内容的打字机输出
+const { displayedText, push: pushText, finish: finishTyping, flush: flushTyping, reset: resetTyping, waitDrained } = useTypewriter()
+// 本轮回答开始时间，用于让光标闪烁相位在 DOM 重建后保持连续
+let streamStartedAt = 0
 
 // 流式内容语音播放状态
 const isStreamingPlaying = ref(false)
@@ -277,7 +280,7 @@ function toggleStreamingSpeech() {
     return
   }
 
-  const plainText = stripMarkdown(chatStore.streamingContent || '')
+  const plainText = stripMarkdown(displayedText.value || '')
   if (!plainText) return
 
   const utterance = new SpeechSynthesisUtterance(plainText)
@@ -309,8 +312,13 @@ onUnmounted(() => {
   }
 })
 
-/** 流式内容的 Markdown 渲染结果 */
-const renderStreaming = computed(() => md.render(chatStore.streamingContent || ''))
+/**
+ * 流式内容的 Markdown 渲染结果
+ * 末尾注入闪烁光标；相位按已流逝时间计算，避免每帧重渲染导致光标常亮
+ */
+const renderStreaming = computed(() =>
+  renderStreamingMarkdown(displayedText.value, Math.floor((performance.now() - streamStartedAt) % 1000))
+)
 
 /** 当前对话标题 */
 const currentConvTitle = computed(() => {
@@ -329,19 +337,35 @@ document.addEventListener('click', () => {
   contextMenu.value.visible = false
 })
 
+// 是否跟随输出自动滚动（用户向上翻看历史时暂停跟随）
+const isFollowing = ref(true)
+
 // 监听消息数量变化，自动滚动到底部
 watch(
   () => chatStore.messages.length,
   () => {
+    isFollowing.value = true
     nextTick(scrollToBottom)
   }
 )
 
+// 流式文本逐帧增长时跟随滚动，nextTick 会合并同一帧内的多次更新
+watch(displayedText, () => {
+  if (isFollowing.value) nextTick(scrollToBottom)
+})
+
 /** 滚动消息列表到底部 */
 function scrollToBottom() {
-  if (messagesRef.value) {
-    messagesRef.value.scrollTop = messagesRef.value.scrollHeight
-  }
+  const el = messagesRef.value
+  if (el) el.scrollTop = el.scrollHeight
+}
+
+/** 记录用户是否停留在底部附近，向上翻看时停止自动跟随 */
+function handleMessagesScroll() {
+  const el = messagesRef.value
+  if (!el) return
+  const distanceToBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+  isFollowing.value = distanceToBottom < 80
 }
 
 /** 创建新对话并自动聚焦输入框 */
@@ -352,13 +376,14 @@ async function handleNewConversation() {
 
 /**
  * 发送消息并处理 SSE 流式响应
- * 解析服务端推送的 token/sources/done 事件，实时更新流式内容
+ * token 内容先进入打字机缓冲，由 composable 按帧均匀输出
  * 网络断开时自动重试，重试前先检查后端是否已保存完整回答
  */
 async function handleSend(content, retryCount = 0) {
   if (!chatStore.currentConversation) return
   chatStore.isSending = true
-  chatStore.streamingContent = ''
+  resetTyping()
+  streamStartedAt = performance.now()
 
   // 创建 AbortController，用于用户主动中断流式请求
   const controller = new AbortController()
@@ -375,69 +400,81 @@ async function handleSend(content, retryCount = 0) {
 
     // 处理 429 提问次数超限
     if (response.status === 429) {
-      const errorData = await response.json()
       chatStore.remainingQuestions = 0
       chatStore.addMessage('assistant', '今日提问次数已用完，请明天再来。')
       return
     }
     const reader = response.body.getReader()
     const decoder = new TextDecoder()
-    let fullContent = ''
     let lastSources = null
+    // SSE 事件缓冲区：一个事件可能被拆到多个网络分块中，需保留未完整的部分
+    let sseBuffer = ''
 
     // 逐块读取流式响应
     while (true) {
       const { done, value } = await reader.read()
       if (done) break
-      const text = decoder.decode(value, { stream: true })
-      const lines = text.split('\n')
+      sseBuffer += decoder.decode(value, { stream: true })
 
-      // 解析 SSE 事件格式
-      let currentEvent = ''
-      for (const line of lines) {
-        if (line.startsWith('event: ')) {
-          // 事件类型行
-          currentEvent = line.slice(7).trim()
-        } else if (line.startsWith('data: ')) {
-          // 事件数据行
-          try {
-            const data = JSON.parse(line.slice(6))
-            if (currentEvent === 'token' && data.content) {
-              // token 事件：追加流式文本内容
-              fullContent += data.content
-              chatStore.streamingContent = fullContent
-            } else if (currentEvent === 'sources' && data.chunks) {
-              // sources 事件：保存 RAG 检索的引用来源
-              lastSources = data.chunks
-            } else if (currentEvent === 'done') {
-              // done 事件：流式响应完成，提取剩余提问次数
-              if (data.remaining) {
-                chatStore.remainingQuestions = data.remaining.user_remaining
-              }
-            }
-          } catch {}
+      // SSE 事件以空行分隔，逐个取出完整事件
+      let sepIndex
+      while ((sepIndex = sseBuffer.indexOf('\n\n')) !== -1) {
+        const rawEvent = sseBuffer.slice(0, sepIndex)
+        sseBuffer = sseBuffer.slice(sepIndex + 2)
+
+        let eventType = ''
+        const dataLines = []
+        for (const line of rawEvent.split('\n')) {
+          if (line.startsWith('event:')) {
+            eventType = line.slice(6).trim()
+          } else if (line.startsWith('data:')) {
+            dataLines.push(line.slice(5).trimStart())
+          }
+        }
+        if (!dataLines.length) continue
+
+        let data
+        try {
+          data = JSON.parse(dataLines.join('\n'))
+        } catch {
+          continue
+        }
+
+        if (eventType === 'token' && data.content) {
+          // token 事件：交给打字机缓冲，按帧均匀输出
+          pushText(data.content)
+        } else if (eventType === 'sources' && data.chunks) {
+          // sources 事件：保存 RAG 检索的引用来源
+          lastSources = data.chunks
+        } else if (eventType === 'done') {
+          // done 事件：流式响应完成，提取剩余提问次数
+          if (data.remaining) {
+            chatStore.remainingQuestions = data.remaining.user_remaining
+          }
         }
       }
     }
 
-    // 流式响应完成，将完整内容作为正式消息保存
-    chatStore.addMessage('assistant', fullContent, lastSources ? { chunks: lastSources } : null)
-    chatStore.streamingContent = ''
+    // 等待缓冲内容输出完毕，再切换为正式消息，避免文字突然跳变
+    finishTyping()
+    await waitDrained()
+    chatStore.addMessage('assistant', displayedText.value, lastSources ? { chunks: lastSources } : null)
+    resetTyping()
   } catch (e) {
     if (e.name === 'AbortError') {
-      // 用户主动停止，保存已接收的部分内容
-      if (chatStore.streamingContent) {
-        chatStore.addMessage('assistant', chatStore.streamingContent + '\n\n*[对话已停止]*')
+      // 用户主动停止，保存已呈现的部分内容
+      flushTyping()
+      if (displayedText.value) {
+        chatStore.addMessage('assistant', displayedText.value + '\n\n*[对话已停止]*')
       }
-      chatStore.streamingContent = ''
+      resetTyping()
     } else {
       // 网络错误或其他异常，尝试自动重试
       const isNetworkError = !e.response || e.name === 'TypeError' || e.message?.includes('network') || e.message?.includes('fetch')
       const maxRetries = 3
 
       if (isNetworkError && retryCount < maxRetries) {
-        // 显示重连提示
-        chatStore.streamingContent = ''
+        resetTyping()
         const retryDelay = Math.min(1000 * Math.pow(2, retryCount), 5000)
 
         // 重试前先检查后端是否已保存完整回答
@@ -448,7 +485,6 @@ async function handleSend(content, retryCount = 0) {
           if (lastMsg && lastMsg.role === 'assistant') {
             // 后端已保存回答，直接展示
             chatStore.addMessage('assistant', lastMsg.content, lastMsg.sources)
-            chatStore.streamingContent = ''
             return
           }
         } catch {
@@ -461,7 +497,7 @@ async function handleSend(content, retryCount = 0) {
       } else {
         // 超过重试次数或非网络错误，显示错误提示
         chatStore.addMessage('assistant', '抱歉，网络连接中断，请检查网络后重新发送问题。')
-        chatStore.streamingContent = ''
+        resetTyping()
       }
     }
   } finally {
@@ -821,6 +857,21 @@ function handleLogout() {
   background: #f3f4f6;
   color: #1f2937;
   border-bottom-left-radius: 4px;
+}
+/* 流式输出的末尾光标：细方块，跟随最后一个字符并闪烁 */
+.chat-message__content :deep(.stream-cursor) {
+  display: inline-block;
+  width: 3px;
+  height: 1.05em;
+  margin-left: 2px;
+  vertical-align: -0.18em;
+  border-radius: 1px;
+  background: #4f46e5;
+  animation: stream-cursor-blink 1s steps(1, end) infinite;
+}
+@keyframes stream-cursor-blink {
+  0%, 50% { opacity: 1; }
+  50.01%, 100% { opacity: 0; }
 }
 /* 流式消息播放按钮样式 */
 .chat-message__actions {
