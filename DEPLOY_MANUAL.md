@@ -194,6 +194,7 @@ GLOBAL_DAILY_QUESTION_LIMIT=300
 ```
 
 **密钥配置** `.env.secrets`（需手动创建，不提交 git）：
+**部署到服务器上的命令** `scp /Users/lwliang/Desktop/AI/BYD-RAG-ChatBot/backend/.env.secrets  byd-server:/opt/byd-rag/backend/.env.secrets`
 
 ```bash
 cd /opt/byd-rag/repo/backend
